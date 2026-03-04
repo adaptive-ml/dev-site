@@ -1,0 +1,67 @@
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+
+:root {
+	--void: #000000;
+
+	--text: #ffffff;
+	--text-body: #d9d9d9;
+	--text-dim: #b0b0b0;
+	--text-muted: #858585;
+	--text-faint: #555555;
+
+	--rule: rgba(255, 255, 255, 0.30);
+	--rule-strong: rgba(255, 255, 255, 0.45);
+
+	--font-body: 'Geist Variable', system-ui, -apple-system, sans-serif;
+	--font-mono: 'Geist Mono Variable', monospace;
+
+	--header-h: 64px;
+	--nav-w: 440px;
+}
+
+*,
+*::before,
+*::after {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+html,
+body {
+	height: 100%;
+	overflow: hidden;
+}
+
+body {
+	font-family: var(--font-body);
+	background: var(--void);
+	color: var(--text);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+a {
+	color: inherit;
+	text-decoration: none;
+}
+
+::-webkit-scrollbar {
+	width: 4px;
+	height: 4px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: transparent;
+	border-radius: 2px;
+}
+
+*:hover > ::-webkit-scrollbar-thumb,
+:hover::-webkit-scrollbar-thumb {
+	background: var(--rule);
+}
