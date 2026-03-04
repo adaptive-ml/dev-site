@@ -12,7 +12,7 @@ const config = {
 	kit: {
 		adapter: adapter({ fallback: '404.html', precompress: false }),
 		alias: {
-			$logos: path.resolve(__dirname, 'static/logos')
+			$logos: path.resolve(__dirname, 'src/logos')
 		},
 		paths: {
 			base: '/dev-site'
