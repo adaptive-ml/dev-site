@@ -1,0 +1,14 @@
+name: Check Links
+
+on:
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  check-links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for dead internal links
+        run: bash scripts/check-links.sh
