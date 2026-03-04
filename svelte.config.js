@@ -12,7 +12,6 @@ const config = {
 	kit: {
 		adapter: adapter({ fallback: '404.html', precompress: false }),
 		alias: {
-			$gradients: path.resolve(__dirname, 'gradients/packages/gradients'),
 			$logos: path.resolve(__dirname, 'static/logos')
 		},
 		paths: {

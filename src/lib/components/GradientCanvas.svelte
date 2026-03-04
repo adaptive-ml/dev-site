@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Gradient, type PresetName, type DomRectData } from '$gradients/src/index';
+	import { Gradient, type DomRectData } from '$lib/gradient';
 
 	let {
 		seed = 'rl-field-guide',
-		preset = 'brand' as PresetName,
 		class: className = '',
 		domRects = [] as DomRectData[],
 		register = 0,
@@ -12,7 +11,6 @@
 		gpuElapsed = $bindable(-1),
 	}: {
 		seed?: string;
-		preset?: PresetName;
 		class?: string;
 		domRects?: DomRectData[];
 		register?: number;
@@ -54,7 +52,7 @@
 		canvas.style.width = rect.width + 'px';
 		canvas.style.height = rect.height + 'px';
 
-		gradient = new Gradient(canvas, { seed, preset });
+		gradient = new Gradient(canvas, { seed });
 		gradient.start().then(() => {
 			active = !gradient!.error;
 			gpuElapsed = gradient!.elapsed;

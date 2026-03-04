@@ -3,7 +3,7 @@
 	import AdaptiveLogo from '$lib/components/AdaptiveLogo.svelte';
 	import NavTree from '$lib/components/NavTree.svelte';
 	import GradientCanvas from '$lib/components/GradientCanvas.svelte';
-	import type { DomRectData } from '$gradients/src/index';
+	import type { DomRectData } from '$lib/gradient';
 	import { navKey } from '$lib/nav';
 	import { getAdjacentEntries, getNode } from '$lib/data';
 	import { page } from '$app/stores';
@@ -84,7 +84,7 @@
 
 <div class="frame">
 	<div class="gradient-layer">
-		<GradientCanvas preset="void" seed="rl-field-guide" {domRects} {register} bind:active={gradientActive} />
+		<GradientCanvas seed="rl-field-guide" {domRects} {register} bind:active={gradientActive} />
 	</div>
 	<header>
 		<div class="header-left">

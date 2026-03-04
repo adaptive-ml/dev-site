@@ -1,4 +1,0 @@
-[submodule "gradients"]
-	path = gradients
-	url = https://github.com/adaptive-ml/gradients.git
-	branch = main
