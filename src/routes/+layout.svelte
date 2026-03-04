@@ -189,11 +189,6 @@
 	.logo-link {
 		display: inline-flex;
 		align-items: center;
-		opacity: 1;
-	}
-
-	.logo-link:hover {
-		opacity: 1;
 	}
 
 	.header-rule {

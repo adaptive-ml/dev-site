@@ -54,4 +54,4 @@ Sentence case headings. Contractions. Fragments are fine. Vary sentence rhythm. 
 
 Entries live in `content/` as markdown files with frontmatter (`title`, `order`). The tree builds automatically from the filesystem. Directory = node with children (`_index.md`). File = leaf node.
 
-Cross-link with markdown: `[SFT](/training/fine-tuning/sft)`. Every entry is a shareable URL.
+Cross-link with relative markdown paths: `[SFT](/dev-site/training/fine-tuning/sft)`. Every entry is a shareable URL. The `/dev-site` prefix is the base path (set in `svelte.config.js`).

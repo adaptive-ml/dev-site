@@ -17,7 +17,6 @@ type Bubble = {
 	vy: number;
 	targetX: number;
 	targetY: number;
-	color: string;
 };
 
 type CurlConfig = {
@@ -166,13 +165,6 @@ function createSeededRandom(seed: number): () => number {
 	};
 }
 
-function generateHslColor(random: () => number): string {
-	const h = Math.floor(random() * 360);
-	const s = 70 + Math.floor(random() * 30);
-	const l = 50 + Math.floor(random() * 20);
-	return `hsl(${h}, ${s}%, ${l}%)`;
-}
-
 function generateBubbles(key: string): Bubble[] {
 	const seed = hashString(key);
 	const random = createSeededRandom(seed);
@@ -185,12 +177,11 @@ function generateBubbles(key: string): Bubble[] {
 	for (let i = 0; i < VOID_SHAPES.length; i++) {
 		const x = spawnMin + random() * spawnRange;
 		const y = spawnMin + random() * spawnRange;
-		const color = generateHslColor(random);
 		const vx = (random() - 0.5) * 18;
 		const vy = (random() - 0.5) * 18;
 		const targetX = bounds.min + random() * range;
 		const targetY = bounds.min + random() * range;
-		bubbles.push({ x, y, color, vx, vy, targetX, targetY });
+		bubbles.push({ x, y, vx, vy, targetX, targetY });
 	}
 	return bubbles;
 }
