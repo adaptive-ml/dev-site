@@ -1,4 +1,4 @@
 ---
 title: "Reward hacking"
-order: 6
+order: 5
 ---

@@ -1,4 +1,4 @@
 ---
 title: "Best-of-N"
-order: 4
+order: 1
 ---
