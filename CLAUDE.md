@@ -22,6 +22,14 @@ One concept per page. Everything that page requires must come from an ancestor o
 
 Depth signals prerequisite, not just taxonomy. A category boundary says "you need the parent context to proceed."
 
+### Ordering gradient
+
+Complexity increases on both axes. Across categories (horizontal): earlier categories are more fundamental, later ones assume more context. Within categories (vertical): earlier entries are more accessible, later ones get more technical. A reader traversing in either direction hits easier material first.
+
+The category sequence follows the pipeline: Training → Data → Rewards → Algorithms → Inference → Evaluation. The first three are foundational (what models are, what they eat, what "good" means). The last three build on that foundation with increasing specificity. New categories slot in by asking: "how much prior context does the reader need?"
+
+Within a category, the `order` value in frontmatter controls sequence. Values use gaps of 10 (10, 20, 30…) so new entries can slot in without renumbering siblings. Place the most broadly accessible entries first. Specialized or prerequisite-heavy entries go later. When adding entries, check what the prior sibling assumes and ensure the new entry doesn't require more background than a reader would have at that point. Files without `order` sort to the end alphabetically.
+
 ### Sibling coherence
 
 Entries at the same level should be the same kind of thing. If a category's children are a technique, a principle, an artifact, and a failure mode, the grouping is too loose.
@@ -44,6 +52,12 @@ After reading three entries in a group, a reader should be able to predict what 
 
 The tree doesn't need to be perfectly balanced, but extreme asymmetry (one branch 3 levels deep, another with 1) signals under-specification or over-nesting.
 
+### Structural intuition
+
+The acid tests are necessary but not sufficient. Structure makes implicit promises to the reader: a subcategory promises breadth, siblings promise comparable weight, depth promises prerequisite density. When the tree passes every formal test but still feels off, check what promise the structure is making and whether the content delivers on it.
+
+A lone child at depth 4 passes the rules but promises a subcategory that contains just one thing. Three siblings where one is trivial pass substitution but promise equal weight they don't deliver. Trust the instinct, then find the structural reason.
+
 ## Writing
 
 Problem before tool: when introducing a technique, establish the problem first. Let the reader connect the two.
@@ -52,6 +66,6 @@ Sentence case headings. Contractions. Fragments are fine. Vary sentence rhythm. 
 
 ## Contributing
 
-Entries live in `content/` as markdown files with frontmatter (`title`, `order`). The tree builds automatically from the filesystem. Directory = node with children (`_index.md`). File = leaf node.
+Entries live in `content/` as markdown files with frontmatter (`title`, `order`). Order uses gaps of 10 for easy insertion. The tree builds automatically from the filesystem. Directory = node with children (`_index.md`). File = leaf node.
 
-Cross-link with relative markdown paths: `[SFT](/dev-site/training/fine-tuning/sft)`. Every entry is a shareable URL. The `/dev-site` prefix is the base path (set in `svelte.config.js`).
+Cross-link with relative markdown paths: `[SFT](/dev-site/training/post-training/sft)`. Every entry is a shareable URL. The `/dev-site` prefix is the base path (set in `svelte.config.js`).

@@ -1,4 +1,4 @@
 ---
 title: "Verifiable rewards"
-order: 4
+order: 40
 ---

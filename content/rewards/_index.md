@@ -1,4 +1,4 @@
 ---
 title: "Rewards"
-order: 4
+order: 40
 ---

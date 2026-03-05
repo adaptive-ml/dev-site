@@ -1,4 +1,4 @@
 ---
 title: "Chatbot Arena"
-order: 2
+order: 20
 ---

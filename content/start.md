@@ -1,6 +1,6 @@
 ---
 title: "What is this?"
-order: 1
+order: 10
 ---
 
 How do you train AI? 
@@ -12,9 +12,9 @@ However, resources are scattered, fragmented, and confusing. So, we've organized
 This glossary is open source and available on [GitHub](https://github.com/adaptive-ml/dev-site).
 
 <div class="construction-banner">
-<pre>┌────────────────────────┐
-│  under construction  │
-└────────────────────────┘</pre>
+<pre>+----------------------+
+|  under construction  |
++----------------------+</pre>
 </div>
 
 <style>

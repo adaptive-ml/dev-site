@@ -9,7 +9,7 @@ export interface TreeNode {
 
 interface MdModule {
 	default: Component;
-	metadata: { title: string; order: number };
+	metadata: { title: string; order?: number };
 }
 
 const modules = import.meta.glob<MdModule>('/content/**/*.md', { eager: true });
@@ -22,7 +22,7 @@ function buildTree(): TreeNode[] {
 		const rel = path.replace(/^\/content\//, '').replace(/\.md$/, '');
 		const parts = rel.split('/');
 		const isIndex = parts[parts.length - 1] === '_index';
-		const { title, order } = mod.metadata;
+		const { title, order = Infinity } = mod.metadata;
 
 		if (isIndex) {
 			// directory node: /content/training/_index.md → key "training"
@@ -71,7 +71,10 @@ function buildTree(): TreeNode[] {
 	// Sort children by order
 	for (const node of nodeMap.values()) {
 		if (node.children) {
-			node.children.sort((a, b) => (a as OrderedNode).order - (b as OrderedNode).order);
+			node.children.sort((a, b) =>
+				(a as OrderedNode).order - (b as OrderedNode).order
+				|| a.slug.localeCompare(b.slug)
+			);
 		}
 	}
 
@@ -80,7 +83,7 @@ function buildTree(): TreeNode[] {
 	for (const [key, node] of nodeMap) {
 		if (!key.includes('/')) roots.push(node);
 	}
-	roots.sort((a, b) => a.order - b.order);
+	roots.sort((a, b) => a.order - b.order || a.slug.localeCompare(b.slug));
 
 	return roots;
 }

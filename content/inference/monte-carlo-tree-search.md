@@ -1,4 +1,4 @@
 ---
 title: "Monte Carlo tree search"
-order: 3
+order: 30
 ---
