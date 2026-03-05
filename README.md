@@ -2,7 +2,7 @@
 
 Adaptive's RL glossary.
 
-Live at [adaptive-ml.github.io/dev-site](https://adaptive-ml.github.io/dev-site/).
+Live at [dev.adaptive-ml.com](https://dev.adaptive-ml.com/).
 
 ## Setup
 

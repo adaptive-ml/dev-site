@@ -16,7 +16,7 @@ const config = {
 			$logos: path.resolve(__dirname, 'src/logos')
 		},
 		paths: {
-			base: '/dev-site'
+			base: ''
 		}
 	}
 };
