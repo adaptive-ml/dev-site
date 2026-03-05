@@ -28,6 +28,8 @@ One concept per page. Everything that page requires must come from an ancestor o
 
 Depth signals prerequisite, not just taxonomy. A category boundary says "you need the parent context to proceed."
 
+Parents provide shallow context for child concepts — enough to keep reading without fully understanding. Children restate shallowly, then deepen. Knowledge compounds with depth.
+
 ### Ordering gradient
 
 Complexity increases on both axes. Across categories (horizontal): earlier categories are more fundamental, later ones assume more context. Within categories (vertical): earlier entries are more accessible, later ones get more technical. A reader traversing in either direction hits easier material first.

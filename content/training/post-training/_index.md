@@ -3,4 +3,4 @@ title: "Post-training"
 order: 30
 ---
 
-## Fine-tuning
+- Everything after pretraining. Taking a foundation model and making it useful.
