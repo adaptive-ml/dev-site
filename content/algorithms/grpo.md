@@ -1,4 +1,4 @@
 ---
 title: "GRPO"
-order: 50
+order: 40
 ---

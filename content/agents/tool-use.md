@@ -1,4 +1,4 @@
 ---
-title: "Pass@k"
+title: "Tool use"
 order: 10
 ---
