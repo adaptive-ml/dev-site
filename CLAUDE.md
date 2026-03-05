@@ -16,9 +16,11 @@ RL for LLMs. Not traditional RL, not all of ML.
 
 The tree follows the learner's path, not how a textbook organizes things. Each page earns its place through searchability, pedagogical value, or both. A concept that doesn't justify a standalone page lives as a section in its parent.
 
-### Headings (T2)
+### Inline headings
 
-A heading is a `## Section` within a page. It earns an anchor link (`#section-slug`) but not its own page. Use headings for concepts that are examples of their parent, building blocks covered in context, or terms that don't pass the standalone value test. The heading text becomes the linkable anchor via mdsvex slug generation.
+A heading is a `## Section` within a page at any depth. It earns an anchor link (`#section-slug`) but not its own page. Use headings for concepts that are examples of their parent, building blocks covered in context, or terms that don't pass the standalone page test. The heading text becomes the linkable anchor via mdsvex slug generation.
+
+Depth tiers (T1, T2, T3, etc.) refer to tree depth, not content format. T1 = top-level categories, T2 = their children, T3 = grandchildren, and so on. Inline headings can appear at any tier. Deferred concepts live in the roadmap as **backlog**, not as a tier.
 
 ### Progressive disclosure
 
@@ -30,7 +32,7 @@ Depth signals prerequisite, not just taxonomy. A category boundary says "you nee
 
 Complexity increases on both axes. Across categories (horizontal): earlier categories are more fundamental, later ones assume more context. Within categories (vertical): earlier entries are more accessible, later ones get more technical. A reader traversing in either direction hits easier material first.
 
-The category sequence follows the pipeline: Training → Data → Rewards → Algorithms → Agents → Inference → Evaluation. The first four are the core pipeline (what models are, what they eat, what "good" means, how they improve). The last three build on that: what models do autonomously (agents), how generation works (inference), and how you measure quality (evaluation). New categories slot in by asking: "how much prior context does the reader need?"
+The category sequence follows the pipeline: Training → Data → Rewards → Algorithms → Agents → Inference → Evaluation → RLOps. The first four are the core pipeline (what models are, what they eat, what "good" means, how they improve). The next three build on that: what models do autonomously (agents), how generation works (inference), and how you measure quality (evaluation). RLOps is the capstone: now that you understand the pipeline, how do you run it in production? It reframes the entire glossary through an operational and economic lens. New categories slot in by asking: "how much prior context does the reader need?"
 
 Within a category, the `order` value in frontmatter controls sequence. Values use gaps of 10 (10, 20, 30…) so new entries can slot in without renumbering siblings. Place the most broadly accessible entries first. Specialized or prerequisite-heavy entries go later. When adding entries, check what the prior sibling assumes and ensure the new entry doesn't require more background than a reader would have at that point. Files without `order` sort to the end alphabetically.
 
