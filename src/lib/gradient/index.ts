@@ -560,7 +560,6 @@ export class Gradient {
 			}
 		}
 
-		// Update uniforms
 		uniformData[2] = elapsed;
 		uniformData[15] = this._register;
 		for (let i = 0; i < this.bubbles.length; i++) {
