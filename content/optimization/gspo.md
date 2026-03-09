@@ -2,6 +2,10 @@
 title: "Group Sequence Policy Optimization"
 abbr: "GSPO"
 order: 25
+sources:
+  - title: "Group Sequence Policy Optimization"
+    url: "https://arxiv.org/abs/2507.18071"
+    authors: "Zheng et al., 2025"
 ---
 
 [GRPO](/optimization/grpo), but clip at the sequence level.

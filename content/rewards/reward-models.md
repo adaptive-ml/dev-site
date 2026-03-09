@@ -1,6 +1,10 @@
 ---
 title: "Reward models"
 order: 20
+sources:
+  - title: "Learning to summarize from human feedback"
+    url: "https://arxiv.org/abs/2009.01325"
+    authors: "Stiennon et al., 2020"
 ---
 
 A model that scores outputs the way a human would.

@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { entrance } from '$lib/entrance';
+	import type { Source } from '$lib/data';
 
 	let { data } = $props();
 	const node = $derived(data.node);
+	const sources: Source[] = $derived(node.sources ?? []);
 </script>
 
 <svelte:head>
@@ -13,6 +15,23 @@
 	{#if node.component}
 		<div class="prose">
 			<node.component />
+			{#if sources.length > 0}
+				<div class="references">
+					<span class="references-label">References</span>
+					<ol class="references-list">
+						{#each sources as source, i}
+							<li class="reference">
+								<a href={source.url} target="_blank" rel="noopener noreferrer" class="reference-link">
+									{source.title}
+								</a>
+								{#if source.authors}
+									<span class="reference-authors">{source.authors}</span>
+								{/if}
+							</li>
+						{/each}
+					</ol>
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -30,16 +49,17 @@
 	.prose {
 		display: flex;
 		flex-direction: column;
-		gap: 32px;
+		gap: 24px;
 		width: 100%;
 		max-width: 720px;
 		margin: auto 0;
 	}
 
 	.prose :global(p) {
-		font-size: 18px;
-		line-height: 1.8;
+		font-size: 16px;
+		line-height: 1.75;
 		color: var(--text-body);
+		text-align: justify;
 	}
 
 	.prose :global(a) {
@@ -80,10 +100,81 @@
 	}
 
 	.prose :global(ul), .prose :global(ol) {
-		font-size: 18px;
-		line-height: 1.8;
+		font-size: 16px;
+		line-height: 1.75;
 		color: var(--text-body);
 		padding-left: 1.5em;
+	}
+
+	/* — references — */
+
+	.references {
+		width: 100%;
+		max-width: 720px;
+		margin-top: 48px;
+		padding-top: 24px;
+		border-top: 1px solid var(--rule);
+	}
+
+	.references-label {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		font-weight: 500;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+
+	.references-list {
+		list-style: none;
+		padding: 0;
+		margin-top: 12px;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		counter-reset: ref;
+	}
+
+	.reference {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding-left: 20px;
+		position: relative;
+		counter-increment: ref;
+	}
+
+	.reference::before {
+		content: counter(ref);
+		position: absolute;
+		left: 0;
+		top: 0;
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--text-faint);
+		line-height: 1.6;
+	}
+
+	.reference-link {
+		font-size: 13px;
+		line-height: 1.6;
+		color: var(--text-dim);
+		text-decoration: underline;
+		text-decoration-color: transparent;
+		text-underline-offset: 3px;
+		transition: color 150ms ease, text-decoration-color 150ms ease;
+	}
+
+	.reference-link:hover {
+		color: var(--text);
+		text-decoration-color: var(--rule);
+	}
+
+	.reference-authors {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--text-faint);
+		line-height: 1.4;
 	}
 
 	@media (max-width: 768px) {
@@ -94,7 +185,11 @@
 		.prose :global(p),
 		.prose :global(ul),
 		.prose :global(ol) {
-			font-size: 17px;
+			font-size: 15px;
+		}
+
+		.references {
+			margin-top: 36px;
 		}
 	}
 </style>

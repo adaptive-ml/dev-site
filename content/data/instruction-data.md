@@ -1,6 +1,13 @@
 ---
 title: "Instruction data"
 order: 20
+sources:
+  - title: "Training language models to follow instructions with human feedback"
+    url: "https://arxiv.org/abs/2203.02155"
+    authors: "Ouyang et al., 2022"
+  - title: "The Flan Collection: designing data and methods for effective instruction tuning"
+    url: "https://arxiv.org/abs/2301.13688"
+    authors: "Longpre et al., 2023"
 ---
 
 Structured input-output pairs for [SFT](/training/post-training/sft).

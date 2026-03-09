@@ -1,6 +1,10 @@
 ---
 title: "Tool use"
 order: 10
+sources:
+  - title: "Toolformer: language models can teach themselves to use tools"
+    url: "https://arxiv.org/abs/2302.04761"
+    authors: "Schick et al., 2023"
 ---
 
 Models calling external tools instead of guessing.

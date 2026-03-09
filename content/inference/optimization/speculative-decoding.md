@@ -1,6 +1,13 @@
 ---
 title: "Speculative decoding"
 order: 10
+sources:
+  - title: "Fast inference from transformers via speculative decoding"
+    url: "https://arxiv.org/abs/2211.17192"
+    authors: "Leviathan et al., 2022"
+  - title: "Draft & Verify: lossless large language model acceleration via self-speculative decoding"
+    url: "https://arxiv.org/abs/2309.08168"
+    authors: "Zhang et al., 2023"
 ---
 
 Use a small model to draft, a large model to verify.

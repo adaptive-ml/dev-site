@@ -2,6 +2,13 @@
 title: "Low-Rank Adaptation"
 abbr: "LoRA"
 order: 20
+sources:
+  - title: "LoRA: low-rank adaptation of large language models"
+    url: "https://arxiv.org/abs/2106.09685"
+    authors: "Hu et al., 2021"
+  - title: "QLoRA: efficient finetuning of quantized LLMs"
+    url: "https://arxiv.org/abs/2305.14314"
+    authors: "Dettmers et al., 2023"
 ---
 
 Train a small adapter instead of the full model.

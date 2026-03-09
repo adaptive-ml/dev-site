@@ -1,6 +1,10 @@
 ---
 title: "Trillion token pressure"
 order: 30
+sources:
+  - title: "Will we run out of data? Limits of LLM scaling based on human-generated data"
+    url: "https://epoch.ai/blog/will-we-run-out-of-data-limits-of-llm-scaling-based-on-human-generated-data"
+    authors: "Villalobos et al., Epoch AI, 2022"
 ---
 
 [Pretraining](/training/pretraining) needs more data than exists.

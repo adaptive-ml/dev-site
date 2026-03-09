@@ -1,6 +1,10 @@
 ---
 title: "Filtering"
 order: 20
+sources:
+  - title: "Scaling data-constrained language models"
+    url: "https://arxiv.org/abs/2305.16264"
+    authors: "Muennighoff et al., 2023"
 ---
 
 Turning a raw [web crawl](/data/training-data/web-crawl) into a usable dataset. Most pipelines stack two passes.

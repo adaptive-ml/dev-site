@@ -2,6 +2,10 @@
 title: "Direct Preference Optimization"
 abbr: "DPO"
 order: 30
+sources:
+  - title: "Direct preference optimization: your language model is secretly a reward model"
+    url: "https://arxiv.org/abs/2305.18290"
+    authors: "Rafailov et al., 2023"
 ---
 
 Skip the reward model. Optimize on preferences directly.

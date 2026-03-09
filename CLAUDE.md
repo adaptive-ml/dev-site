@@ -104,7 +104,18 @@ Sentence case headings. Contractions. Fragments are fine. Vary sentence rhythm. 
 
 ## Contributing
 
-Entries live in `content/` as markdown files with frontmatter (`title`, `order`, optional `abbr` for acronym pages). Order uses gaps of 10 for easy insertion. The tree builds automatically from the filesystem. Directory = node with children (`_index.md`). File = leaf node.
+Entries live in `content/` as markdown files with frontmatter (`title`, `order`, optional `abbr` for acronym pages, optional `sources` for references). Order uses gaps of 10 for easy insertion. The tree builds automatically from the filesystem. Directory = node with children (`_index.md`). File = leaf node.
+
+### References
+
+Entries can include a `sources` array in frontmatter. These render as a quiet "References" section below the prose. Primary sources only: arxiv papers, Nature, official project announcements. No blog explainers or course materials. Validate with `uv run --with pyyaml sandbox/validate-references.py`.
+
+```yaml
+sources:
+  - title: "Paper title matching arxiv exactly"
+    url: "https://arxiv.org/abs/XXXX.XXXXX"
+    authors: "Last et al., YYYY"
+```
 
 ### Acronym pages
 
