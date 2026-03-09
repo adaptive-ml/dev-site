@@ -27,7 +27,7 @@ When in doubt, start with prose. Promote to heading if the concept keeps getting
 
 **Inline headings count as concepts.** They're lighter than pages but they still introduce new ideas. A page with its intro concept plus one heading is fine. Two headings is a signal to check whether children should be pages instead. Three or more means the page is doing too much. The one-concept-per-page principle applies to inline headings, not just to child pages.
 
-Depth tiers (T1, T2, T3, etc.) refer to tree depth, not content format. T1 = top-level categories, T2 = their children, T3 = grandchildren, and so on. Inline headings can appear at any tier. Deferred concepts live in the roadmap as **backlog**, not as a tier.
+Depth tiers (T1, T2, T3, etc.) refer to tree depth, not content format. T1 = top-level categories, T2 = their children, T3 = grandchildren, and so on. Inline headings can appear at any tier.
 
 ### Progressive disclosure
 
