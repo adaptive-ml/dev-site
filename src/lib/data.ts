@@ -1,16 +1,23 @@
 import type { Component } from 'svelte';
 
+export interface Source {
+	title: string;
+	url: string;
+	authors?: string;
+}
+
 export interface TreeNode {
 	slug: string;
 	title: string;
 	abbr?: string;
+	sources?: Source[];
 	component?: Component;
 	children?: TreeNode[];
 }
 
 interface MdModule {
 	default: Component;
-	metadata: { title: string; order?: number; abbr?: string };
+	metadata: { title: string; order?: number; abbr?: string; sources?: Source[] };
 }
 
 const modules = import.meta.glob<MdModule>('/content/**/*.md', { eager: true });
@@ -23,7 +30,11 @@ function buildTree(): TreeNode[] {
 		const rel = path.replace(/^\/content\//, '').replace(/\.md$/, '');
 		const parts = rel.split('/');
 		const isIndex = parts[parts.length - 1] === '_index';
-		const { title, order = Infinity, abbr } = mod.metadata;
+		const { title, order = Infinity, abbr, sources } = mod.metadata;
+		const optional = {
+			...(abbr && { abbr }),
+			...(sources?.length && { sources }),
+		};
 
 		if (isIndex) {
 			// directory node: /content/training/_index.md → key "training"
@@ -34,9 +45,9 @@ function buildTree(): TreeNode[] {
 				existing.title = title;
 				existing.order = order;
 				existing.component = mod.default;
-				if (abbr) existing.abbr = abbr;
+				Object.assign(existing, optional);
 			} else {
-				nodeMap.set(key, { slug, title, order, component: mod.default, ...(abbr && { abbr }) });
+				nodeMap.set(key, { slug, title, order, component: mod.default, ...optional });
 			}
 		} else {
 			// leaf node: /content/training/alignment.md → key "training/alignment"
@@ -47,9 +58,9 @@ function buildTree(): TreeNode[] {
 				existing.title = title;
 				existing.order = order;
 				existing.component = mod.default;
-				if (abbr) existing.abbr = abbr;
+				Object.assign(existing, optional);
 			} else {
-				nodeMap.set(key, { slug, title, order, component: mod.default, ...(abbr && { abbr }) });
+				nodeMap.set(key, { slug, title, order, component: mod.default, ...optional });
 			}
 		}
 	}

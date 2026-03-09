@@ -2,6 +2,10 @@
 title: "Supervised fine-tuning"
 abbr: "SFT"
 order: 10
+sources:
+  - title: "Training language models to follow instructions with human feedback"
+    url: "https://arxiv.org/abs/2203.02155"
+    authors: "Ouyang et al., 2022"
 ---
 
 Train on input-output examples to teach a model a task or format.

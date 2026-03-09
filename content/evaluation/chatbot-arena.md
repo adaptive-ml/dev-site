@@ -1,6 +1,10 @@
 ---
 title: "Chatbot Arena"
 order: 10
+sources:
+  - title: "Chatbot Arena: an open platform for evaluating LLMs by human preference"
+    url: "https://arxiv.org/abs/2403.04132"
+    authors: "Chiang et al., 2024"
 ---
 
 Real users, real queries, anonymous models.

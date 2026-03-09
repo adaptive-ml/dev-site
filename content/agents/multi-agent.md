@@ -1,6 +1,10 @@
 ---
 title: "Multi-agent systems"
 order: 20
+sources:
+  - title: "How we built our multi-agent research system"
+    url: "https://www.anthropic.com/engineering/multi-agent-research-system"
+    authors: "Anthropic, 2025"
 ---
 
 Multiple agents, each with a job.

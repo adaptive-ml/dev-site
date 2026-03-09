@@ -1,6 +1,10 @@
 ---
 title: "LLM-as-judge"
 order: 30
+sources:
+  - title: "Judging LLM-as-a-judge with MT-Bench and Chatbot Arena"
+    url: "https://arxiv.org/abs/2306.05685"
+    authors: "Zheng et al., 2023"
 ---
 
 Using a strong model to evaluate other models.

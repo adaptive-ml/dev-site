@@ -2,6 +2,10 @@
 title: "RL from AI feedback"
 abbr: "RLAIF"
 order: 30
+sources:
+  - title: "Constitutional AI: harmlessness from AI feedback"
+    url: "https://arxiv.org/abs/2212.08073"
+    authors: "Bai et al., Anthropic, 2022"
 ---
 
 Replace human annotators with a stronger model.

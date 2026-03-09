@@ -1,6 +1,13 @@
 ---
 title: "Mixing"
 order: 40
+sources:
+  - title: "Data Mixing Laws: optimizing data mixtures by predicting language modeling performance"
+    url: "https://arxiv.org/abs/2403.16952"
+    authors: "Ye et al., 2024"
+  - title: "DoReMi: optimizing data mixtures speeds up language model pretraining"
+    url: "https://arxiv.org/abs/2305.10429"
+    authors: "Xie et al., 2023"
 ---
 
 Combining data sources in the right proportions.

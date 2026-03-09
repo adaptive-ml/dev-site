@@ -1,6 +1,10 @@
 ---
 title: "Test-time compute scaling"
 order: 20
+sources:
+  - title: "Scaling LLM test-time compute optimally can be more effective than scaling model parameters"
+    url: "https://arxiv.org/abs/2408.03314"
+    authors: "Snell et al., 2024"
 ---
 
 A different [scaling](/training/pretraining/scaling-laws) axis. Spend more compute when the model runs, not when it trains.

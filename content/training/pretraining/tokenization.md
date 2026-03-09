@@ -1,6 +1,10 @@
 ---
 title: "Tokenization"
 order: 10
+sources:
+  - title: "Neural machine translation of rare words with subword units"
+    url: "https://arxiv.org/abs/1508.07909"
+    authors: "Sennrich et al., 2015"
 ---
 
 Splitting text into the pieces a model actually reads.

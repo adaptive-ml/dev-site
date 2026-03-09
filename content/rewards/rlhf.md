@@ -2,6 +2,13 @@
 title: "RL from human feedback"
 abbr: "RLHF"
 order: 10
+sources:
+  - title: "Deep reinforcement learning from human preferences"
+    url: "https://arxiv.org/abs/1706.03741"
+    authors: "Christiano et al., 2017"
+  - title: "Training language models to follow instructions with human feedback"
+    url: "https://arxiv.org/abs/2203.02155"
+    authors: "Ouyang et al., 2022"
 ---
 
 Humans rank outputs. A model learns their preferences. RL optimizes against it.

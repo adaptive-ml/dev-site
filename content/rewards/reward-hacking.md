@@ -1,6 +1,10 @@
 ---
 title: "Reward hacking"
 order: 40
+sources:
+  - title: "Scaling laws for reward model overoptimization"
+    url: "https://arxiv.org/abs/2210.10760"
+    authors: "Gao et al., 2022"
 ---
 
 When the model games the reward instead of getting better.

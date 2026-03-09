@@ -2,6 +2,10 @@
 title: "Proximal Policy Optimization"
 abbr: "PPO"
 order: 10
+sources:
+  - title: "Proximal policy optimization algorithms"
+    url: "https://arxiv.org/abs/1707.06347"
+    authors: "Schulman et al., 2017"
 ---
 
 The original algorithm behind [RLHF](/rewards/rlhf).

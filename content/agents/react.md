@@ -1,6 +1,10 @@
 ---
 title: "ReAct"
 order: 15
+sources:
+  - title: "ReAct: synergizing reasoning and acting in language models"
+    url: "https://arxiv.org/abs/2210.03629"
+    authors: "Yao et al., 2022"
 ---
 
 Think, act, observe. Repeat.

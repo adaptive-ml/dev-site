@@ -1,6 +1,10 @@
 ---
 title: "Chain-of-thought"
 order: 10
+sources:
+  - title: "Chain-of-thought prompting elicits reasoning in large language models"
+    url: "https://arxiv.org/abs/2201.11903"
+    authors: "Wei et al., 2022"
 ---
 
 Making the model show its work.
