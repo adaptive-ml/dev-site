@@ -1,17 +1,27 @@
 <script lang="ts">
 	import { entrance } from '$lib/entrance';
+	import symbolSvg from '$logos/symbol/symbol-white.svg?raw';
 	import type { Source } from '$lib/data';
 
 	let { data } = $props();
 	const node = $derived(data.node);
 	const sources: Source[] = $derived(node.sources ?? []);
+
+	function externalLinks(node: HTMLElement) {
+		for (const a of node.querySelectorAll<HTMLAnchorElement>('a[href^="http"]')) {
+			if (!a.hostname.includes('adaptive-ml')) {
+				a.target = '_blank';
+				a.rel = 'noopener';
+			}
+		}
+	}
 </script>
 
 <svelte:head>
 	<title>{node.title}{node.abbr ? ` (${node.abbr})` : ''} — RL Glossary</title>
 </svelte:head>
 
-<div class="page" use:entrance>
+<div class="page" use:entrance use:externalLinks>
 	{#if node.component}
 		<div class="prose">
 			<node.component />
@@ -34,6 +44,11 @@
 			{/if}
 		</div>
 	{/if}
+	<a href="https://www.adaptive-ml.com/contact-us" class="entry-cta" target="_blank" rel="noopener">
+		<span class="cta-symbol">{@html symbolSvg}</span>
+		<span class="cta-headline">Talk to an RL expert</span>
+		<svg class="cta-arrow" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+	</a>
 </div>
 
 <style>
@@ -177,6 +192,56 @@
 		line-height: 1.4;
 	}
 
+	/* — CTA — */
+
+	.entry-cta {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		width: 100%;
+		max-width: 720px;
+		margin-top: 48px;
+		padding: 12px 16px;
+		border: 1px solid var(--rule);
+		border-radius: 4px;
+		transition: border-color 150ms ease, border-radius 200ms ease;
+	}
+
+	.entry-cta:hover {
+		border-color: var(--rule-strong);
+		border-radius: 18px;
+	}
+
+	.cta-symbol {
+		display: flex;
+		flex-shrink: 0;
+	}
+
+	.cta-symbol :global(svg) {
+		width: 16px;
+		height: 16px;
+	}
+
+	.cta-headline {
+		flex: 1;
+		font-family: var(--font-mono);
+		font-size: 13px;
+		font-weight: 500;
+		color: var(--text-muted);
+	}
+
+
+	.cta-arrow {
+		flex-shrink: 0;
+		color: var(--text-muted);
+		transition: color 150ms ease;
+	}
+
+	.entry-cta:hover .cta-headline,
+	.entry-cta:hover .cta-arrow {
+		color: var(--text);
+	}
+
 	@media (max-width: 768px) {
 		.page {
 			padding: 24px;
@@ -190,6 +255,16 @@
 
 		.references {
 			margin-top: 36px;
+		}
+
+		.entry-cta {
+			margin-top: 36px;
+			gap: 10px;
+			padding: 10px 14px;
+		}
+
+		.cta-headline {
+			font-size: clamp(10px, 3.2vw, 12px);
 		}
 	}
 </style>

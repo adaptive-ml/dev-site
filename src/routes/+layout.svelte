@@ -144,17 +144,6 @@
 				{@render children()}
 			{/key}
 			<div class="viewport-footer">
-			{#if !isHome}
-				<a href="https://www.adaptive-ml.com/contact-us" class="entry-cta" target="_blank" rel="noopener">
-					<span class="cta-content">
-						<span class="cta-row">
-							<AdaptiveLogo color="white" height={16} />
-							<span class="cta-action">Contact us <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg></span>
-						</span>
-						<span class="cta-headline">Going to production? We help teams build, own, and deploy specialized LLMs.</span>
-					</span>
-				</a>
-			{/if}
 			{#if adjacent.prev || adjacent.next}
 				<nav class="page-nav">
 					{#if adjacent.prev}
@@ -179,8 +168,8 @@
 
 <style>
 	.frame {
-		position: relative;
-		height: 100vh;
+		position: fixed;
+		inset: 0;
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
@@ -344,60 +333,6 @@
 
 	.viewport-footer {
 		flex-shrink: 0;
-		padding-top: 24px;
-	}
-
-	.entry-cta {
-		flex-shrink: 0;
-		display: block;
-		width: 100%;
-		max-width: 720px;
-		padding: 20px 20px 16px;
-		margin: 0 auto;
-		border: 1px solid var(--rule);
-		border-radius: 4px;
-		transition: border-color 150ms ease, border-radius 200ms ease;
-	}
-
-	.entry-cta:hover {
-		border-color: var(--rule-strong);
-		border-radius: 18px;
-	}
-
-	.cta-content {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-	}
-
-	.cta-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		line-height: 1;
-	}
-
-	.cta-headline {
-		font-family: var(--font-mono);
-		font-size: 13px;
-		font-weight: 500;
-		color: var(--text-dim);
-	}
-
-	.cta-action {
-		font-family: var(--font-mono);
-		font-size: 11px;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		color: var(--text-muted);
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		transition: color 150ms ease;
-	}
-
-	.entry-cta:hover .cta-action {
-		color: var(--text);
 	}
 
 	.page-nav {
@@ -509,10 +444,6 @@
 
 		.nav-overlay.open {
 			display: block;
-		}
-
-		.entry-cta {
-			margin: 0 20px;
 		}
 
 		.page-nav {
