@@ -12,9 +12,17 @@ However, resources are scattered, fragmented, and confusing. So, we've organized
 This glossary is open source and available on [GitHub](https://github.com/adaptive-ml/dev-site).
 
 <div class="construction-banner">
-<pre>+----------------------+
-|  under construction  |
-+----------------------+</pre>
+<pre>+---------------------------------------+
+|      ___                              |
+|     |   |.__                          |
+|   __|___|___|                         |
+|   (O)    (o)                          |
+|                                       |
+|   under construction.                 |
+|   upgrades and additions coming.      |
+|   <a href="https://github.com/adaptive-ml/dev-site">contribute</a>                          |
+|                                       |
++---------------------------------------+</pre>
 </div>
 
 <style>
@@ -26,7 +34,17 @@ This glossary is open source and available on [GitHub](https://github.com/adapti
 	font-size: 13px;
 	font-weight: 400;
 	color: var(--text-muted, #858585);
-	line-height: 1.5;
+	line-height: 1.2;
 	margin: 0;
+}
+.construction-banner pre a {
+	color: var(--text-muted, #858585);
+	text-decoration: underline;
+	text-decoration-style: dotted;
+	text-underline-offset: 0.25em;
+	text-decoration-color: var(--text-faint, #555555);
+}
+.construction-banner pre a:hover {
+	color: var(--text-body, #d9d9d9);
 }
 </style>
