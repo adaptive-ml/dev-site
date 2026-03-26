@@ -19,6 +19,17 @@
 
 <svelte:head>
 	<title>{node.title}{node.abbr ? ` (${node.abbr})` : ''} — RL Glossary</title>
+	{#if node.description}
+		<meta name="description" content={node.description} />
+		<meta property="og:title" content="{node.title}{node.abbr ? ` (${node.abbr})` : ''} — RL Glossary" />
+		<meta property="og:description" content={node.description} />
+		<meta property="og:type" content="article" />
+		<meta name="image" property="og:image" content="https://dev.adaptive-ml.com/thumb.png" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:image" content="https://dev.adaptive-ml.com/thumb.png" />
+		<meta name="twitter:title" content="{node.title}{node.abbr ? ` (${node.abbr})` : ''} — RL Glossary" />
+		<meta name="twitter:description" content={node.description} />
+	{/if}
 </svelte:head>
 
 <div class="page" use:entrance use:externalLinks>

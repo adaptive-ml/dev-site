@@ -11,6 +11,15 @@
 
 <svelte:head>
 	<title>RL Glossary — Adaptive ML</title>
+	<meta name="description" content="A structured glossary that makes RL accessible. Concepts organized by where they fit in the pipeline, introduced one at a time." />
+	<meta property="og:title" content="RL Glossary — Adaptive ML" />
+	<meta property="og:description" content="A structured glossary that makes RL accessible. Concepts organized by where they fit in the pipeline, introduced one at a time." />
+	<meta property="og:type" content="website" />
+	<meta name="image" property="og:image" content="https://dev.adaptive-ml.com/thumb.png" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:image" content="https://dev.adaptive-ml.com/thumb.png" />
+	<meta name="twitter:title" content="RL Glossary — Adaptive ML" />
+	<meta name="twitter:description" content="A structured glossary that makes RL accessible. Concepts organized by where they fit in the pipeline, introduced one at a time." />
 </svelte:head>
 
 <div class="home">

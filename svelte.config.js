@@ -21,13 +21,35 @@ function remarkBaseLinks() {
 	};
 }
 
+/** Remark plugin: extract description from opening paragraphs (100+ chars for OG tags). */
+function remarkDescription() {
+	return (tree, file) => {
+		const paragraphs = tree.children.filter((n) => n.type === 'paragraph');
+		if (!paragraphs.length) return;
+		let desc = extractText(paragraphs[0]);
+		for (let i = 1; i < paragraphs.length && desc.length < 100; i++) {
+			desc += ' ' + extractText(paragraphs[i]);
+		}
+		if (desc) {
+			file.data.fm = file.data.fm || {};
+			file.data.fm.description = desc;
+		}
+	};
+}
+
+function extractText(node) {
+	if (node.type === 'text') return node.value;
+	if (node.children) return node.children.map(extractText).join('');
+	return '';
+}
+
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	extensions: ['.svelte', '.md'],
 	preprocess: [
 		mdsvex({
 			extensions: ['.md'],
-			remarkPlugins: [remarkBaseLinks],
+			remarkPlugins: [remarkBaseLinks, remarkDescription],
 			rehypePlugins: [rehypeSlug]
 		})
 	],

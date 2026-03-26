@@ -10,6 +10,7 @@ export interface TreeNode {
 	slug: string;
 	title: string;
 	abbr?: string;
+	description?: string;
 	sources?: Source[];
 	component?: Component;
 	children?: TreeNode[];
@@ -17,7 +18,7 @@ export interface TreeNode {
 
 interface MdModule {
 	default: Component;
-	metadata: { title: string; order?: number; abbr?: string; sources?: Source[] };
+	metadata: { title: string; order?: number; abbr?: string; description?: string; sources?: Source[] };
 }
 
 const modules = import.meta.glob<MdModule>('/content/**/*.md', { eager: true });
@@ -30,9 +31,10 @@ function buildTree(): TreeNode[] {
 		const rel = path.replace(/^\/content\//, '').replace(/\.md$/, '');
 		const parts = rel.split('/');
 		const isIndex = parts[parts.length - 1] === '_index';
-		const { title, order = Infinity, abbr, sources } = mod.metadata;
+		const { title, order = Infinity, abbr, description, sources } = mod.metadata;
 		const optional = {
 			...(abbr && { abbr }),
+			...(description && { description }),
 			...(sources?.length && { sources }),
 		};
 
