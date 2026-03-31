@@ -90,7 +90,7 @@
 		font-size: 16px;
 		line-height: 1.75;
 		color: var(--text-body);
-		text-align: justify;
+		text-align: left;
 	}
 
 	.prose :global(a) {
