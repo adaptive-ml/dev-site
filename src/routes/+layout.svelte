@@ -3,6 +3,7 @@
 	import AdaptiveLogo from '$lib/components/AdaptiveLogo.svelte';
 	import NavTree from '$lib/components/NavTree.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
+	import ReferencePopup from '$lib/components/ReferencePopup.svelte';
 	import GradientCanvas from '$lib/components/GradientCanvas.svelte';
 	import type { DomRectData } from '$lib/gradient';
 	import { navKey } from '$lib/nav';
@@ -164,6 +165,7 @@
 		</div>
 	</div>
 	<CommandPalette bind:open={paletteOpen} />
+	<ReferencePopup />
 </div>
 
 <style>

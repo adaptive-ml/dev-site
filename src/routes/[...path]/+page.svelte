@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { entrance } from '$lib/entrance';
 	import symbolSvg from '$logos/symbol/symbol-white.svg?raw';
-	import type { Source } from '$lib/data';
+	import { getPageRefs } from '$lib/references';
+	import { openReference } from '$lib/referencePopup';
 
 	let { data } = $props();
 	const node = $derived(data.node);
-	const sources: Source[] = $derived(node.sources ?? []);
+	const pageRefs = $derived(getPageRefs(data.segments.join('/')));
 
 	function externalLinks(node: HTMLElement) {
 		for (const a of node.querySelectorAll<HTMLAnchorElement>('a[href^="http"]')) {
@@ -36,17 +37,21 @@
 	{#if node.component}
 		<div class="prose">
 			<node.component />
-			{#if sources.length > 0}
+			{#if pageRefs.length > 0}
 				<div class="references">
-					<span class="references-label">References</span>
+					<span class="references-header">
+						<span class="references-label">References</span>
+						<button class="references-viewall" onclick={() => openReference(pageRefs[0])}>View all</button>
+					</span>
 					<ol class="references-list">
-						{#each sources as source, i}
+						{#each pageRefs as ref}
 							<li class="reference">
-								<a href={source.url} target="_blank" rel="noopener noreferrer" class="reference-link">
-									{source.title}
+								<button class="ref-number" onclick={() => openReference(ref)}>{ref.id}</button>
+								<a href={ref.url} target="_blank" rel="noopener noreferrer" class="reference-link">
+									{ref.title}
 								</a>
-								{#if source.authors}
-									<span class="reference-authors">{source.authors}</span>
+								{#if ref.authors}
+									<span class="reference-authors">{ref.authors}</span>
 								{/if}
 							</li>
 						{/each}
@@ -142,6 +147,12 @@
 		border-top: 1px solid var(--rule);
 	}
 
+	.references-header {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
 	.references-label {
 		font-family: var(--font-mono);
 		font-size: 11px;
@@ -151,6 +162,25 @@
 		color: var(--text-muted);
 	}
 
+	.references-viewall {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--text-faint);
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		text-decoration: underline;
+		text-decoration-color: transparent;
+		text-underline-offset: 3px;
+		transition: color 150ms ease, text-decoration-color 150ms ease;
+	}
+
+	.references-viewall:hover {
+		color: var(--text-muted);
+		text-decoration-color: var(--text-faint);
+	}
+
 	.references-list {
 		list-style: none;
 		padding: 0;
@@ -158,27 +188,36 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		counter-reset: ref;
 	}
 
 	.reference {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding-left: 20px;
+		padding-left: 36px;
 		position: relative;
-		counter-increment: ref;
 	}
 
-	.reference::before {
-		content: counter(ref);
+	.ref-number {
 		position: absolute;
 		left: 0;
-		top: 0;
+		top: 1px;
 		font-family: var(--font-mono);
-		font-size: 11px;
+		font-size: 10px;
 		color: var(--text-faint);
-		line-height: 1.6;
+		line-height: 1.4;
+		background: none;
+		border: 1px solid var(--text-faint);
+		border-radius: 4px;
+		padding: 1px 5px;
+		cursor: pointer;
+		transition: color 150ms ease, border-color 150ms ease, border-radius 200ms ease;
+	}
+
+	.ref-number:hover {
+		color: var(--text-muted);
+		border-color: var(--text-muted);
+		border-radius: 18px;
 	}
 
 	.reference-link {
