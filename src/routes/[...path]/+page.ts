@@ -10,5 +10,11 @@ export const load: PageLoad = ({ params }) => {
 	const segments = params.path.split('/');
 	const node = getNode(segments);
 	if (!node) throw error(404, 'Not found');
-	return { node, segments };
+
+	const breadcrumbs = segments.map((seg, i) => ({
+		title: getNode(segments.slice(0, i + 1))?.title ?? seg,
+		path: segments.slice(0, i + 1).join('/')
+	}));
+
+	return { node, segments, breadcrumbs };
 };

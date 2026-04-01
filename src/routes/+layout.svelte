@@ -28,6 +28,9 @@
 
 	const MAX_DPR = 2;
 
+	const ORIGIN = 'https://dev.adaptive-ml.com';
+	const canonicalUrl = $derived(ORIGIN + $page.url.pathname);
+
 	const routePath = $derived($page.url.pathname.slice(base.length) || '/');
 	const adjacent = $derived(getAdjacentEntries(routePath));
 	const register = $derived(routePath === '/' ? 0.35 : 0.07);
@@ -87,6 +90,11 @@
 		}
 	}
 </script>
+
+<svelte:head>
+	<link rel="canonical" href={canonicalUrl} />
+	<meta property="og:url" content={canonicalUrl} />
+</svelte:head>
 
 <svelte:window onkeydown={handleKeydown} bind:innerWidth bind:innerHeight />
 

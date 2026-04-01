@@ -20,7 +20,21 @@
 	<meta name="twitter:image" content="https://dev.adaptive-ml.com/thumb.png" />
 	<meta name="twitter:title" content="RL Glossary — Adaptive ML" />
 	<meta name="twitter:description" content="A structured glossary that makes RL accessible. Concepts organized by where they fit in the pipeline, introduced one at a time." />
+	{@html `<script type="application/ld+json">${JSON.stringify({
+		"@context": "https://schema.org",
+		"@type": "DefinedTermSet",
+		"name": "RL Glossary",
+		"description": "A structured glossary that makes reinforcement learning for LLMs accessible.",
+		"url": "https://dev.adaptive-ml.com",
+		"publisher": {
+			"@type": "Organization",
+			"name": "Adaptive ML",
+			"url": "https://adaptive-ml.com"
+		}
+	})}</script>`}
 </svelte:head>
+
+<h1 class="sr-only">RL Glossary</h1>
 
 <div class="home">
 	<div class="splash" class:revealed={splashRevealed}>

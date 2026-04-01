@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "prepare": "svelte-kit sync",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "postbuild": "bun scripts/generate-sitemap.ts"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.0",

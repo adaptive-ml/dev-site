@@ -4,9 +4,45 @@
 	import { getPageRefs } from '$lib/references';
 	import { openReference } from '$lib/referencePopup';
 
+	const ORIGIN = 'https://dev.adaptive-ml.com';
+
 	let { data } = $props();
 	const node = $derived(data.node);
 	const pageRefs = $derived(getPageRefs(data.segments.join('/')));
+	const pageUrl = $derived(`${ORIGIN}/${data.segments.join('/')}`);
+
+	const breadcrumbLd = $derived({
+		"@context": "https://schema.org",
+		"@type": "BreadcrumbList",
+		"itemListElement": [
+			{ "@type": "ListItem", "position": 1, "name": "RL Glossary", "item": ORIGIN },
+			...data.breadcrumbs.map((b: { title: string; path: string }, i: number) => ({
+				"@type": "ListItem",
+				"position": i + 2,
+				"name": b.title,
+				"item": `${ORIGIN}/${b.path}`
+			}))
+		]
+	});
+
+	const pageLd = $derived(node.children ? {
+		"@context": "https://schema.org",
+		"@type": "DefinedTermSet",
+		"name": node.title,
+		"description": node.description ?? "",
+		"url": pageUrl
+	} : {
+		"@context": "https://schema.org",
+		"@type": "DefinedTerm",
+		"name": node.title,
+		"description": node.description ?? "",
+		"url": pageUrl,
+		"inDefinedTermSet": {
+			"@type": "DefinedTermSet",
+			"name": "RL Glossary",
+			"url": ORIGIN
+		}
+	});
 
 	function externalLinks(node: HTMLElement) {
 		for (const a of node.querySelectorAll<HTMLAnchorElement>('a[href^="http"]')) {
@@ -31,9 +67,12 @@
 		<meta name="twitter:title" content="{node.title}{node.abbr ? ` (${node.abbr})` : ''} — RL Glossary" />
 		<meta name="twitter:description" content={node.description} />
 	{/if}
+	{@html `<script type="application/ld+json">${JSON.stringify(pageLd)}</script>`}
+	{@html `<script type="application/ld+json">${JSON.stringify(breadcrumbLd)}</script>`}
 </svelte:head>
 
 <div class="page" use:entrance use:externalLinks>
+	<h1 class="sr-only">{node.title}{node.abbr ? ` (${node.abbr})` : ''}</h1>
 	{#if node.component}
 		<div class="prose">
 			<node.component />
