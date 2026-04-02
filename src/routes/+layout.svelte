@@ -11,7 +11,7 @@
 	import { navKey } from '$lib/nav';
 	import { getAdjacentEntries, getNode } from '$lib/data';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { goto, afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 
 	let { children } = $props();
@@ -22,6 +22,7 @@
 	let gradientActive = $state(false);
 	let innerWidth = $state(0);
 	let innerHeight = $state(0);
+	let hasNavigated = $state(false);
 
 	const isMobile = $derived(innerWidth <= 1024);
 
@@ -62,6 +63,10 @@
 				invert: true,
 			},
 		];
+	});
+
+	afterNavigate(({ from }) => {
+		if (from) hasNavigated = true;
 	});
 
 	$effect(() => {
@@ -144,7 +149,11 @@
 		<div class="viewport" class:sdf={gradientActive}>
 			{#if !isHome}
 				<div class="toolbar">
-					<button class="back-btn" onclick={() => history.back()}>&larr; Back</button>
+					{#if hasNavigated}
+						<button class="back-btn" onclick={() => history.back()}>&larr; Back</button>
+					{:else}
+						<a class="back-btn" href={resolve('/')}>&larr; Home</a>
+					{/if}
 					{#if currentNode}
 						<span class="toolbar-rule"></span>
 						<span class="toolbar-title">{currentNode.title}</span>

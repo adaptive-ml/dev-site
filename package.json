@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "bun scripts/fetch-prices.ts",
     "dev": "vite dev",
+    "prebuild": "bun scripts/fetch-prices.ts",
     "build": "vite build",
     "preview": "vite preview",
     "prepare": "svelte-kit sync",

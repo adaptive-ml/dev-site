@@ -11,6 +11,7 @@
 	const pageRefs = $derived(getPageRefs(data.segments.join('/')));
 	const pageUrl = $derived(`${ORIGIN}/${data.segments.join('/')}`);
 	const ogImage = $derived(`${ORIGIN}/og/${data.segments[0]}.png`);
+	const isInteractive = $derived(data.segments.join('/') === 'rlops/cost-calculator');
 
 	const breadcrumbLd = $derived({
 		"@context": "https://schema.org",
@@ -72,40 +73,47 @@
 	{@html `<script type="application/ld+json">${JSON.stringify(breadcrumbLd)}</script>`}
 </svelte:head>
 
-<div class="page" use:entrance use:externalLinks>
-	<h1 class="sr-only">{node.title}{node.abbr ? ` (${node.abbr})` : ''}</h1>
-	{#if node.component}
-		<div class="prose">
-			<node.component />
-			{#if pageRefs.length > 0}
-				<div class="references">
-					<span class="references-header">
-						<span class="references-label">References</span>
-						<button class="references-viewall" onclick={() => openReference(pageRefs[0])}>View all</button>
-					</span>
-					<ol class="references-list">
-						{#each pageRefs as ref}
-							<li class="reference">
-								<button class="ref-number" onclick={() => openReference(ref)}>{ref.id}</button>
-								<a href={ref.url} target="_blank" rel="noopener noreferrer" class="reference-link">
-									{ref.title}
-								</a>
-								{#if ref.authors}
-									<span class="reference-authors">{ref.authors}</span>
-								{/if}
-							</li>
-						{/each}
-					</ol>
-				</div>
-			{/if}
-		</div>
-	{/if}
-	<a href="https://www.adaptive-ml.com/contact-us" class="entry-cta" target="_blank" rel="noopener">
-		<span class="cta-symbol">{@html symbolSvg}</span>
-		<span class="cta-headline">Talk to an RL expert</span>
-		<svg class="cta-arrow" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
-	</a>
-</div>
+{#if isInteractive}
+	<div class="page app" use:entrance use:externalLinks>
+		<h1 class="sr-only">{node.title}{node.abbr ? ` (${node.abbr})` : ''}</h1>
+		{#if node.component}<node.component />{/if}
+	</div>
+{:else}
+	<div class="page" use:entrance use:externalLinks>
+		<h1 class="sr-only">{node.title}{node.abbr ? ` (${node.abbr})` : ''}</h1>
+		{#if node.component}
+			<div class="prose">
+				<node.component />
+				{#if pageRefs.length > 0}
+					<div class="references">
+						<span class="references-header">
+							<span class="references-label">References</span>
+							<button class="references-viewall" onclick={() => openReference(pageRefs[0])}>View all</button>
+						</span>
+						<ol class="references-list">
+							{#each pageRefs as ref}
+								<li class="reference">
+									<button class="ref-number" onclick={() => openReference(ref)}>{ref.id}</button>
+									<a href={ref.url} target="_blank" rel="noopener noreferrer" class="reference-link">
+										{ref.title}
+									</a>
+									{#if ref.authors}
+										<span class="reference-authors">{ref.authors}</span>
+									{/if}
+								</li>
+							{/each}
+						</ol>
+					</div>
+				{/if}
+			</div>
+		{/if}
+		<a href="https://www.adaptive-ml.com/contact-us" class="entry-cta" target="_blank" rel="noopener">
+			<span class="cta-symbol">{@html symbolSvg}</span>
+			<span class="cta-headline">Talk to an RL expert</span>
+			<svg class="cta-arrow" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+		</a>
+	</div>
+{/if}
 
 <style>
 	.page {
@@ -115,6 +123,12 @@
 		align-items: center;
 		overflow-y: auto;
 		padding: 48px;
+	}
+
+	.page.app {
+		overflow: hidden;
+		padding: 16px 24px 0;
+		align-items: stretch;
 	}
 
 	.prose {
