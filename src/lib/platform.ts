@@ -1,4 +1,4 @@
-export function isMac(): boolean {
+function isMac(): boolean {
 	if (typeof navigator === 'undefined') return false;
 	return /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform);
 }

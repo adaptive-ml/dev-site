@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tree, flatNodes, type TreeNode } from '$lib/data';
 	import { page } from '$app/stores';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { restartPage } from '$lib/nav';
 	import { modKey } from '$lib/platform';
 	import Fuse from 'fuse.js';
@@ -10,7 +10,8 @@
 	$effect(() => { mod = modKey(); });
 
 	const currentPath = $derived($page.params?.path ?? '');
-	const routePath = $derived($page.url.pathname.slice(base.length) || '/');
+	const urlBase = resolve('/').slice(0, -1);
+	const routePath = $derived($page.url.pathname.slice(urlBase.length) || '/');
 	const isHome = $derived(routePath === '/');
 	const activeSegments = $derived(currentPath ? currentPath.split('/') : []);
 
@@ -109,7 +110,7 @@
 		<li class="node" class:last={isLast} class:active class:on-path={onPath}>
 			<div class="link-row">
 				<a
-					href="{base}/{fullPath}"
+					href={resolve(`/${fullPath}` as `/${string}`)}
 					class="link"
 					class:active
 					onclick={(e: MouseEvent) => handleLinkClick(e, fullPath, hasChildren, active)}
@@ -163,7 +164,7 @@
 	{#if searchResults}
 		<ul class="search-results">
 			{#each searchResults as entry}
-				{@const href = base + '/' + entry.path.join('/')}
+				{@const href = resolve(`/${entry.path.join('/')}` as `/${string}`)}
 				{@const active = isActive(entry.path.join('/'))}
 				<li>
 					<a {href} class="search-result" class:active onclick={restartPage}>
@@ -178,7 +179,7 @@
 		</ul>
 	{:else}
 		<div class="root">
-			<a href="{base}/" class="link" class:active={isHome} onclick={restartPage}>
+			<a href={resolve('/')} class="link" class:active={isHome} onclick={restartPage}>
 				<span class="label">Home</span>
 			</a>
 			<div class="branch">

@@ -108,7 +108,7 @@ Entries live in `content/` as markdown files with frontmatter (`title`, `order`,
 
 ### References
 
-Entries can include a `sources` array in frontmatter. These render as a "References" section below the prose with globally unique numbers (deduplicated across the entire glossary by URL). Clicking a reference number opens a popup showing all references, with the clicked one centered. Expanding a row shows which pages cite it. The registry is built at module evaluation time in `src/lib/references.ts`. Primary sources only: arxiv papers, Nature, official project announcements. No blog explainers or course materials. Validate with `uv run --with pyyaml sandbox/validate-references.py`.
+Entries can include a `sources` array in frontmatter. These render as a "References" section below the prose with globally unique numbers (deduplicated across the entire glossary by URL). Clicking a reference number opens a popup showing all references, with the clicked one centered. Expanding a row shows which pages cite it. The registry is built at module evaluation time in `src/lib/references.ts`. Primary sources only: arxiv papers, Nature, official project announcements. No blog explainers or course materials. Validate with `uv run --with pyyaml scripts/check-references.py`.
 
 ```yaml
 sources:

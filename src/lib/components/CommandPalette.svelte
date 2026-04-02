@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { flatNodes } from '$lib/data';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { restartPage } from '$lib/nav';
@@ -24,7 +24,8 @@
 		distance: 100,
 	});
 
-	const currentPath = $derived($page.url.pathname.slice(base.length).replace(/^\//, '') || '');
+	const basePath = resolve('/').slice(0, -1);
+	const currentPath = $derived($page.url.pathname.slice(basePath.length).replace(/^\//, '') || '');
 
 	const results = $derived.by(() => {
 		const q = search.trim();
@@ -52,7 +53,7 @@
 	}
 
 	function navigate(entry: (typeof allNodes)[0]) {
-		const href = base + '/' + entry.path.join('/');
+		const href = resolve(`/${entry.path.join('/')}` as `/${string}`);
 		close();
 		restartPage();
 		goto(href);

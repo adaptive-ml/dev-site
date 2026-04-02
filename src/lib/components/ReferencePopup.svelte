@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { activeReference, closeReference } from '$lib/referencePopup';
 	import { globalReferences } from '$lib/references';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { restartPage } from '$lib/nav';
 
@@ -45,7 +45,7 @@
 	function navigateTo(path: string) {
 		closeReference();
 		restartPage();
-		goto(base + '/' + path);
+		goto(resolve(`/${path}` as `/${string}`));
 	}
 </script>
 

@@ -10,6 +10,7 @@
 	const node = $derived(data.node);
 	const pageRefs = $derived(getPageRefs(data.segments.join('/')));
 	const pageUrl = $derived(`${ORIGIN}/${data.segments.join('/')}`);
+	const ogImage = $derived(`${ORIGIN}/og/${data.segments[0]}.png`);
 
 	const breadcrumbLd = $derived({
 		"@context": "https://schema.org",
@@ -61,9 +62,9 @@
 		<meta property="og:title" content="{node.title}{node.abbr ? ` (${node.abbr})` : ''} — RL Glossary" />
 		<meta property="og:description" content={node.description} />
 		<meta property="og:type" content="article" />
-		<meta name="image" property="og:image" content="https://dev.adaptive-ml.com/thumb.png" />
+		<meta name="image" property="og:image" content={ogImage} />
 		<meta name="twitter:card" content="summary_large_image" />
-		<meta name="twitter:image" content="https://dev.adaptive-ml.com/thumb.png" />
+		<meta name="twitter:image" content={ogImage} />
 		<meta name="twitter:title" content="{node.title}{node.abbr ? ` (${node.abbr})` : ''} — RL Glossary" />
 		<meta name="twitter:description" content={node.description} />
 	{/if}

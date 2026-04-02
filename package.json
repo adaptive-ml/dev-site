@@ -9,13 +9,15 @@
     "preview": "vite preview",
     "prepare": "svelte-kit sync",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "postbuild": "bun scripts/generate-sitemap.ts"
+    "postbuild": "bun scripts/generate-sitemap.ts",
+    "generate:og": "bun scripts/generate-og-images.ts"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.0",
     "@sveltejs/kit": "^2.15.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@webgpu/types": "^0.1.69",
+    "sharp": "^0.34.5",
     "svelte": "^5.0.0",
     "svelte-check": "^4.4.4",
     "typescript": "^5.0.0",

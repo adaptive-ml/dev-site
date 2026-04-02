@@ -1,6 +1,7 @@
 <script lang="ts">
 	import symbol from '$logos/symbol/symbol-white.svg?raw';
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 
 	let splashRevealed = $state(false);
 
@@ -40,6 +41,20 @@
 	<div class="splash" class:revealed={splashRevealed}>
 		{@html symbol}
 	</div>
+	<nav class="sr-only" aria-label="Glossary categories">
+		<ul>
+			<li><a href={resolve('/start')}>What is this?</a></li>
+			<li><a href={resolve('/training')}>Training</a></li>
+			<li><a href={resolve('/data')}>Data</a></li>
+			<li><a href={resolve('/rewards')}>Rewards</a></li>
+			<li><a href={resolve('/optimization')}>Optimization</a></li>
+			<li><a href={resolve('/agents')}>Agents</a></li>
+			<li><a href={resolve('/inference')}>Inference</a></li>
+			<li><a href={resolve('/evaluation')}>Evaluation</a></li>
+			<li><a href={resolve('/rlops')}>RLOps</a></li>
+			<li><a href={resolve('/faq')}>FAQ</a></li>
+		</ul>
+	</nav>
 </div>
 
 <style>

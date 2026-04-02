@@ -5,12 +5,14 @@
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import ReferencePopup from '$lib/components/ReferencePopup.svelte';
 	import GradientCanvas from '$lib/components/GradientCanvas.svelte';
+	import geistLatinUrl from '@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url';
+	import geistMonoLatinUrl from '@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2?url';
 	import type { DomRectData } from '$lib/gradient';
 	import { navKey } from '$lib/nav';
 	import { getAdjacentEntries, getNode } from '$lib/data';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 
 	let { children } = $props();
 
@@ -31,7 +33,8 @@
 	const ORIGIN = 'https://dev.adaptive-ml.com';
 	const canonicalUrl = $derived(ORIGIN + $page.url.pathname);
 
-	const routePath = $derived($page.url.pathname.slice(base.length) || '/');
+	const basePath = resolve('/').slice(0, -1);
+	const routePath = $derived($page.url.pathname.slice(basePath.length) || '/');
 	const adjacent = $derived(getAdjacentEntries(routePath));
 	const register = $derived(routePath === '/' ? 0.35 : 0.07);
 	const isHome = $derived(routePath === '/');
@@ -85,13 +88,15 @@
 			const entry = e.key === 'ArrowLeft' ? adjacent.prev : adjacent.next;
 			if (entry) {
 				e.preventDefault();
-				goto(base + '/' + entry.path.join('/'));
+				goto(resolve(`/${entry.path.join('/')}` as `/${string}`));
 			}
 		}
 	}
 </script>
 
 <svelte:head>
+	<link rel="preload" href={geistLatinUrl} as="font" type="font/woff2" crossorigin="anonymous" />
+	<link rel="preload" href={geistMonoLatinUrl} as="font" type="font/woff2" crossorigin="anonymous" />
 	<link rel="canonical" href={canonicalUrl} />
 	<meta property="og:url" content={canonicalUrl} />
 </svelte:head>
@@ -123,7 +128,7 @@
 				<AdaptiveLogo color="white" height={18} />
 			</a>
 			<span class="header-rule"></span>
-			<a href="{base}/" class="header-title">RL Glossary</a>
+			<a href={resolve('/')} class="header-title">RL Glossary</a>
 		</div>
 		<a href="https://www.adaptive-ml.com/contact-us" class="header-cta">Contact</a>
 	</header>
@@ -156,13 +161,13 @@
 			{#if adjacent.prev || adjacent.next}
 				<nav class="page-nav">
 					{#if adjacent.prev}
-						<a href="{base}/{adjacent.prev.path.join('/')}" class="nav-link nav-prev">
+						<a href={resolve(`/${adjacent.prev.path.join('/')}` as `/${string}`)} class="nav-link nav-prev">
 							<span class="nav-label">&larr; Previous</span>
 							<span class="nav-title">{adjacent.prev.node.title}</span>
 						</a>
 					{/if}
 					{#if adjacent.next}
-						<a href="{base}/{adjacent.next.path.join('/')}" class="nav-link nav-next">
+						<a href={resolve(`/${adjacent.next.path.join('/')}` as `/${string}`)} class="nav-link nav-next">
 							<span class="nav-label">Next &rarr;</span>
 							<span class="nav-title">{adjacent.next.node.title}</span>
 						</a>
