@@ -1,7 +1,7 @@
 ---
-title: "Cost calculator"
+title: "GPU cost calculator"
 order: 15
-description: "Compare the cost of proprietary API models against self-hosted specialized models trained with RL."
+description: "Calculate how much you can save by self-hosting a specialized model vs using API providers like OpenAI, Anthropic, and Google. Compare GPU costs, token volume, and model sizes."
 ---
 
 <script>
