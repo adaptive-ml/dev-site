@@ -17,8 +17,6 @@
 	let showMoreSizes = $state(false);
 	let customSizeActive = $state(false);
 	let customSizeParamsB = $state(10);
-	let editingTokens = $state(false);
-	let tokenInputVal = $state('');
 	let editingGpuCount = $state(false);
 	let gpuCountInputVal = $state('');
 	let showMoreGpus = $state(false);
@@ -34,7 +32,10 @@
 	// URL-synced state (safe for SSR: defaults when not in browser)
 	const params = $derived(browser ? $page.url.searchParams : new URLSearchParams());
 	const selectedApiModelId = $derived(params.get('model') ?? '');
-	const monthlyTokens = $derived(Number(params.get('tok')) || 100_000_000_000);
+	const callsPerMonth = $derived(Number(params.get('calls')) || 0);
+	const tokensPerCall = $derived(Number(params.get('tpc')) || 0);
+	const hasCallsMode = $derived(!!params.get('calls') && !!params.get('tpc'));
+	const monthlyTokens = $derived(hasCallsMode ? callsPerMonth * tokensPerCall : (Number(params.get('tok')) || 100_000_000_000));
 	const VALID_SIZES = new Set<string>(['4b', '8b', '14b', '32b']);
 	const rawSize = $derived(params.get('size') ?? '');
 	const selectedModelSize = $derived<ModelSize>(
@@ -47,31 +48,30 @@
 	);
 	const stepParam = $derived(params.get('step') ?? '');
 
-	const STEPS = ['model', 'size', 'precision', 'workload', 'gpu', 'report'] as const;
+	const STEPS = ['model', 'size', 'workload', 'gpu', 'report'] as const;
 	type Step = typeof STEPS[number];
 
 	const step = $derived<Step>(
 		stepParam === 'report' ? 'report'
 		: stepParam === 'gpu' || stepParam === 'gpus' ? 'gpu'
 		: stepParam === 'workload' || stepParam === 'tokens' || stepParam === 'ratio' || stepParam === 'done' ? 'workload'
-		: stepParam === 'precision' ? (selectedApiModelId ? 'precision' : 'model')
+		: stepParam === 'precision' ? (rawSize ? 'gpu' : 'model')
 		: stepParam === 'size' ? (selectedApiModelId ? 'size' : 'model')
 		: 'model'
 	);
 
 	// Stamp defaults into URL when arriving at a step
 	$effect(() => {
-		if (step === 'precision' && !params.get('prec')) replaceParams({ prec: 'fp8' });
-		if (step === 'workload' && !params.get('tok')) replaceParams({ tok: String(100_000_000_000) });
+		if (step === 'workload' && !params.get('calls')) replaceParams({ calls: '50000000', tpc: '1500', tok: String(50000000 * 1500) });
 		if (step === 'gpu' && !params.get('gpu')) replaceParams({ gpu: GPU_OPTIONS[0].id });
+		if (step === 'gpu' && !params.get('prec')) replaceParams({ prec: 'fp8' });
 	});
 
 	// A step is reachable if its param exists in the URL
 	const stepReachable = $derived.by(() => ({
 		model: true,
 		size: !!selectedApiModelId,
-		precision: !!rawSize,
-		workload: !!params.get('prec'),
+		workload: !!rawSize,
 		gpu: !!params.get('tok'),
 		report: !!params.get('gpu'),
 	}));
@@ -87,37 +87,61 @@
 
 	const inputRatio = $derived(Number(params.get('ratio')) || 75);
 	const precision = $derived<Precision>((params.get('prec') as Precision) || 'fp8');
-	const customGpu: GpuSpec = $derived({ id: 'custom', name: 'Custom', memoryGb: 80, bandwidthGbps: 3355, costPerHour: customGpuRate, provider: '' });
+	const customGpu: GpuSpec = $derived({ id: 'custom', name: 'Custom', memoryGb: 80, bandwidthGbps: 3355, costPerHour: customGpuRate, provider: '', packSize: 1 });
 	const selectedGpu = $derived(params.get('gpu') === 'custom' ? customGpu : (GPU_OPTIONS.find(g => g.id === params.get('gpu')) ?? GPU_OPTIONS[0]));
 	const gpuCountMode = $derived<'auto' | 'manual'>(params.get('gpus') ? 'manual' : 'auto');
 	const gpuCountManual = $derived(Number(params.get('gpus')) || 1);
 
-	// Discrete snap-point slider: 1, 2.5, 5 pattern per decade, from 1B to 10T
-	const TOK_STOPS: number[] = [];
-	for (const exp of [9, 10, 11, 12, 13]) {
+	// Calls per month: snap-point slider, 1M to 10B
+	const CALLS_STOPS: number[] = [];
+	for (const exp of [6, 7, 8, 9, 10]) {
 		const base = Math.pow(10, exp);
-		TOK_STOPS.push(base, base * 2.5, base * 5);
+		CALLS_STOPS.push(base, base * 2.5, base * 5);
 	}
-	const TOK_SNAPS = TOK_STOPS.filter((v) => v >= 1e9 && v <= 10e12);
+	const CALLS_SNAPS = CALLS_STOPS.filter((v) => v >= 1e6 && v <= 10e9);
 
-	function sliderToTokens(v: number): number {
+	function sliderToCalls(v: number): number {
 		const idx = Math.round(v);
-		return TOK_SNAPS[Math.min(idx, TOK_SNAPS.length - 1)];
+		return CALLS_SNAPS[Math.min(idx, CALLS_SNAPS.length - 1)];
 	}
-	function tokensToSlider(t: number): number {
+	function callsToSlider(c: number): number {
 		let closest = 0;
 		let minDist = Infinity;
-		for (let i = 0; i < TOK_SNAPS.length; i++) {
-			const dist = Math.abs(Math.log10(t) - Math.log10(TOK_SNAPS[i]));
+		for (let i = 0; i < CALLS_SNAPS.length; i++) {
+			const dist = Math.abs(Math.log10(c) - Math.log10(CALLS_SNAPS[i]));
 			if (dist < minDist) { minDist = dist; closest = i; }
 		}
 		return closest;
 	}
-	let tokSlider = $state(tokensToSlider(100_000_000_000));
-	$effect(() => { tokSlider = tokensToSlider(monthlyTokens); });
-	let showMorePrecisions = $state(false);
+	let callsSlider = $state(callsToSlider(50_000_000));
+	$effect(() => { if (callsPerMonth > 0) callsSlider = callsToSlider(callsPerMonth); });
+
+	const TASK_PRESETS = [
+		{ label: 'classification', tpc: 500 },
+		{ label: 'chat', tpc: 1500 },
+		{ label: 'summarization', tpc: 3000 },
+	] as const;
+
+	// Tokens per call: snap-point slider, 50 to 100K
+	const TPC_STOPS: number[] = [50, 100, 200, 500, 1000, 1500, 2000, 3000, 4000, 8000, 16000, 32000, 64000, 100000];
+	function sliderToTpc(v: number): number {
+		const idx = Math.round(v);
+		return TPC_STOPS[Math.min(idx, TPC_STOPS.length - 1)];
+	}
+	function tpcToSlider(t: number): number {
+		let closest = 0;
+		let minDist = Infinity;
+		for (let i = 0; i < TPC_STOPS.length; i++) {
+			const dist = Math.abs(Math.log10(t) - Math.log10(TPC_STOPS[i]));
+			if (dist < minDist) { minDist = dist; closest = i; }
+		}
+		return closest;
+	}
+	let tpcSlider = $state(tpcToSlider(1500));
+	$effect(() => { if (tokensPerCall > 0) tpcSlider = tpcToSlider(tokensPerCall); });
 	let showAdvancedWorkload = $state(false);
-	$effect(() => { step; showOther = false; showMoreSizes = false; showMorePrecisions = false; customInput = false; customSizeActive = false; showMoreGpus = false; customGpuActive = false; showAdvancedWorkload = false; });
+	let showMoreGpuOptions = $state(false);
+	$effect(() => { step; showOther = false; showMoreSizes = false; customInput = false; customSizeActive = false; showMoreGpus = false; customGpuActive = false; showAdvancedWorkload = false; showMoreGpuOptions = false; });
 
 	let customModel = $state<ApiModel>({ id: 'custom', name: 'Custom', provider: '', inputPer1M: 5.0, outputPer1M: 5.0 });
 
@@ -290,7 +314,7 @@
 	});
 
 	const genActive = $derived(!!hoveredModelId || !!selectedApiModelId);
-	const specActive = $derived(!!hoveredParamsB || ((step === 'size' || step === 'precision' || step === 'workload' || step === 'gpu' || step === 'report') && !!rawSize));
+	const specActive = $derived(!!hoveredParamsB || ((step === 'size' || step === 'workload' || step === 'gpu' || step === 'report') && !!rawSize));
 
 	// Scale shapes by cost/size. Log scale for perceptual linearity.
 	// Generalist: blended $/1M → scale 0.7–1.2
@@ -348,23 +372,41 @@
 		replaceParams({ prec: precId });
 	}
 
-	function updateTokens(tok: number) {
-		replaceParams({ tok: String(tok) });
+	function updateCalls(calls: number) {
+		const tpc = tokensPerCall || 1500;
+		replaceParams({ calls: String(calls), tpc: String(tpc), tok: String(calls * tpc) });
 	}
 
-	function commitTokenInput() {
-		editingTokens = false;
-		const raw = tokenInputVal.trim().toLowerCase().replace(/,/g, '');
+	function updateTpc(tpc: number) {
+		const calls = callsPerMonth || 50000000;
+		replaceParams({ calls: String(calls), tpc: String(tpc), tok: String(calls * tpc) });
+	}
+
+	let editingCalls = $state(false);
+	let callsInputVal = $state('');
+	let editingTpc = $state(false);
+	let tpcInputVal = $state('');
+
+	function commitCallsInput() {
+		editingCalls = false;
+		const raw = callsInputVal.trim().toLowerCase().replace(/,/g, '');
 		let multiplier = 1;
 		let num = raw;
-		if (raw.endsWith('t')) { multiplier = 1e12; num = raw.slice(0, -1); }
-		else if (raw.endsWith('b')) { multiplier = 1e9; num = raw.slice(0, -1); }
+		if (raw.endsWith('b')) { multiplier = 1e9; num = raw.slice(0, -1); }
 		else if (raw.endsWith('m')) { multiplier = 1e6; num = raw.slice(0, -1); }
 		else if (raw.endsWith('k')) { multiplier = 1e3; num = raw.slice(0, -1); }
 		const parsed = parseFloat(num) * multiplier;
-		if (!isNaN(parsed)) {
-			updateTokens(Math.round(Math.min(Math.max(parsed, 1e9), 10e12)));
-		}
+		if (!isNaN(parsed) && parsed > 0) updateCalls(Math.round(Math.min(Math.max(parsed, 1e6), 10e9)));
+	}
+
+	function commitTpcInput() {
+		editingTpc = false;
+		const raw = tpcInputVal.trim().toLowerCase().replace(/,/g, '');
+		let multiplier = 1;
+		let num = raw;
+		if (raw.endsWith('k')) { multiplier = 1e3; num = raw.slice(0, -1); }
+		const parsed = parseFloat(num) * multiplier;
+		if (!isNaN(parsed) && parsed > 0) updateTpc(Math.round(Math.min(Math.max(parsed, 10), 100000)));
 	}
 </script>
 
@@ -450,8 +492,9 @@
 	<!-- Controls -->
 	<div class="controls">
 		{#if step === 'model'}
-			<h2 class="prompt">choose an api model <button class="help-btn" onclick={() => toggleHelp('model')}>?</button></h2>
-			{#if activeHelp === 'model'}<span class="help-text">the api model sets your baseline cost per token. the calculator compares it against self-hosting a smaller, task-specific model.</span>{/if}
+			<h2 class="prompt">choose a generalist model <button class="help-btn" onclick={() => toggleHelp('model')}>?</button></h2>
+			<p class="step-subtitle">compare the cost of a generalist API model to a self-hosted specialist model at scale.</p>
+			{#if activeHelp === 'model'}<span class="help-text">the generalist model sets your baseline cost per token. the calculator compares it against self-hosting a smaller, task-specific model.</span>{/if}
 			<div class="model-grid">
 				{#each PRIMARY_MODELS as model}
 					{@const logo = VENDOR_LOGOS[model.provider.toLowerCase()]}
@@ -502,6 +545,7 @@
 					</button>
 				{/if}
 			</div>
+			<a class="inline-source" href="https://www.llm-prices.com" target="_blank" rel="noopener">pricing via llm-prices.com</a>
 			<div class="nav-row">
 				<span></span>
 				{#if selectedApiModelId}<button class="nav-btn" onclick={nextStep}>next →</button>{/if}
@@ -555,65 +599,66 @@
 				<button class="nav-btn" onclick={() => { hoveredParamsB = null; prevStep(); }}>← back</button>
 				{#if rawSize}<button class="nav-btn" onclick={() => { hoveredParamsB = null; nextStep(); }}>next →</button>{/if}
 			</div>
-		{:else if step === 'precision'}
-			<h2 class="prompt">choose precision <button class="help-btn" onclick={() => toggleHelp('precision')}>?</button></h2>
-			{#if activeHelp === 'precision'}<span class="help-text">lower precision uses less memory and increases throughput. fp8 is standard for production with negligible quality loss.</span>{/if}
-			<div class="size-grid">
-				<button
-					class="size-card"
-					class:selected={precision === 'fp8'}
-					onclick={() => selectPrecision('fp8')}
-					onmouseenter={() => { hoveredPrecision = 'fp8'; }}
-					onmouseleave={() => { hoveredPrecision = null; }}
-				>
-					<span class="sc-name">FP8 <span class="sc-label">standard</span></span>
-				</button>
-				{#if showMorePrecisions}
-					{#each PRECISION_OPTIONS.filter(p => p.id !== 'fp8') as p}
-						<button
-							class="size-card"
-							class:selected={precision === p.id}
-							onclick={() => selectPrecision(p.id)}
-							onmouseenter={() => { hoveredPrecision = p.id; }}
-							onmouseleave={() => { hoveredPrecision = null; }}
-						>
-							<span class="sc-name">{p.name}</span>
-						</button>
-					{/each}
-				{:else}
-					<button class="size-card other-card" onclick={() => { showMorePrecisions = true; }}>
-						<span class="sc-name">other</span>
-					</button>
-				{/if}
-			</div>
-			<div class="nav-row">
-				<button class="nav-btn" onclick={prevStep}>← back</button>
-				<button class="nav-btn" onclick={nextStep}>next →</button>
-			</div>
 		{:else if step === 'workload'}
 			<h2 class="prompt">configure workload</h2>
 			<div class="workload-group">
 				<div class="workload-row">
-					<span class="workload-label">tokens / month <button class="help-btn" onclick={() => toggleHelp('tokens')}>?</button></span>
-					{#if editingTokens}
+					<span class="workload-label">calls / month <button class="help-btn" onclick={() => toggleHelp('calls')}>?</button></span>
+					{#if editingCalls}
 						<input
 							class="workload-input"
 							type="text"
 							inputmode="numeric"
-							value={tokenInputVal}
-							oninput={(e) => { tokenInputVal = e.currentTarget.value; }}
-							onblur={commitTokenInput}
-							onkeydown={(e) => { if (e.key === 'Enter') commitTokenInput(); if (e.key === 'Escape') { editingTokens = false; } }}
+							value={callsInputVal}
+							oninput={(e) => { callsInputVal = e.currentTarget.value; }}
+							onblur={commitCallsInput}
+							onkeydown={(e) => { if (e.key === 'Enter') commitCallsInput(); if (e.key === 'Escape') { editingCalls = false; } }}
 							use:autoFocus
 						/>
 					{:else}
-						<button class="workload-value" onclick={() => { editingTokens = true; tokenInputVal = formatNum(monthlyTokens); }}>
-							{formatNum(monthlyTokens)}
+						<button class="workload-value" onclick={() => { editingCalls = true; callsInputVal = formatNum(callsPerMonth || 50000000); }}>
+							{formatNum(callsPerMonth || 50000000)}
 						</button>
 					{/if}
 				</div>
-				{#if activeHelp === 'tokens'}<span class="help-text">total monthly token volume (input + output). higher volume increases savings from self-hosting because gpu cost is fixed.</span>{/if}
-				<input type="range" min="0" max={TOK_SNAPS.length - 1} step="1" bind:value={tokSlider} oninput={() => { updateTokens(sliderToTokens(tokSlider)); }} class="slider workload-slider" />
+				{#if activeHelp === 'calls'}<span class="help-text">how many API calls per month. multiply by tokens per call to get total volume.</span>{/if}
+				<input type="range" min="0" max={CALLS_SNAPS.length - 1} step="1" bind:value={callsSlider} oninput={() => { updateCalls(sliderToCalls(callsSlider)); }} class="slider workload-slider" />
+			</div>
+			<div class="workload-group">
+				<div class="workload-row">
+					<span class="workload-label">tokens / call <button class="help-btn" onclick={() => toggleHelp('tpc')}>?</button></span>
+					{#if editingTpc}
+						<input
+							class="workload-input"
+							type="text"
+							inputmode="numeric"
+							value={tpcInputVal}
+							oninput={(e) => { tpcInputVal = e.currentTarget.value; }}
+							onblur={commitTpcInput}
+							onkeydown={(e) => { if (e.key === 'Enter') commitTpcInput(); if (e.key === 'Escape') { editingTpc = false; } }}
+							use:autoFocus
+						/>
+					{:else}
+						<button class="workload-value" onclick={() => { editingTpc = true; tpcInputVal = String(tokensPerCall || 1500); }}>
+							{formatNum(tokensPerCall || 1500)}
+						</button>
+					{/if}
+				</div>
+				{#if activeHelp === 'tpc'}<span class="help-text">average tokens per call. use the task hints to jump to a typical range.</span>{/if}
+				<div class="task-hints">
+					{#each TASK_PRESETS as preset}
+						<button
+							class="task-hint"
+							class:active={tokensPerCall === preset.tpc}
+							onclick={() => updateTpc(preset.tpc)}
+						>{preset.label}</button>
+					{/each}
+				</div>
+				<input type="range" min="0" max={TPC_STOPS.length - 1} step="1" bind:value={tpcSlider} oninput={() => { updateTpc(sliderToTpc(tpcSlider)); }} class="slider workload-slider" />
+			</div>
+			<div class="workload-total">
+				<span class="workload-total-label">total</span>
+				<span class="workload-total-value">{formatNum(monthlyTokens)}<span class="workload-total-unit"> tokens/mo</span></span>
 			</div>
 			{#if showAdvancedWorkload}
 				<div class="workload-group">
@@ -673,9 +718,34 @@
 				<span class="gpu-warning">{activeSizeLabel} needs {Math.ceil(activeParamsB * bytesPerParam)} GB in {activePrecision.toUpperCase()}. {activeGpu.name} has {activeGpu.memoryGb} GB.</span>
 			{/if}
 
+			{#if showMoreGpuOptions}
+				<div class="workload-group">
+					<div class="workload-row">
+						<span class="workload-label">precision <button class="help-btn" onclick={() => toggleHelp('precision')}>?</button></span>
+					</div>
+					{#if activeHelp === 'precision'}<span class="help-text">lower precision uses less memory and increases throughput. fp8 is standard for production with negligible quality loss.</span>{/if}
+					<div class="size-grid">
+						{#each PRECISION_OPTIONS as p}
+							<button
+								class="size-card"
+								class:selected={precision === p.id}
+								onclick={() => selectPrecision(p.id)}
+								onmouseenter={() => { hoveredPrecision = p.id; }}
+								onmouseleave={() => { hoveredPrecision = null; }}
+							>
+								<span class="sc-name">{p.name}{#if p.id === 'fp8'} <span class="sc-label">standard</span>{/if}</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+				<button class="more-toggle" onclick={() => { showMoreGpuOptions = false; }}>▴ less</button>
+			{:else}
+				<button class="more-toggle" onclick={() => { showMoreGpuOptions = true; }}>▾ more</button>
+			{/if}
+
 			<div class="adv-section">
 				<span class="workload-label">gpu count <button class="help-btn" onclick={() => toggleHelp('gpu-count')}>?</button></span>
-				{#if activeHelp === 'gpu-count'}<span class="help-text">number of gpus serving your model. auto picks the minimum for your token volume. add more for headroom.</span>{/if}
+				{#if activeHelp === 'gpu-count'}<span class="help-text">number of gpus serving your model. auto targets ~70% utilization for production headroom. gpu count snaps to node pack sizes (e.g. 8 for H100/H200).</span>{/if}
 				<div class="count-controls">
 					<button class="count-mode" class:selected={gpuCountMode === 'auto'} onclick={() => { replaceParams({ gpus: '' }); }}>auto</button>
 					<button class="count-mode" class:selected={gpuCountMode === 'manual'} onclick={() => { replaceParams({ gpus: String(results?.gpusAuto ?? 1) }); }}>manual</button>
@@ -704,14 +774,25 @@
 				</div>
 				{#if results}
 					{@const utilPct = Math.round(results.utilization * 100)}
-					{@const utilColor = results.utilization > 1 ? '#f13242' : results.utilization > 0.85 ? '#00ac3a' : `color-mix(in srgb, #f13242 ${Math.round((1 - results.utilization / 0.85) * 100)}%, #00ac3a)`}
+					{@const u = results.utilization}
+				{@const utilColor =
+					u > 0.95 ? '#f13242'
+					: u > 0.80 ? `color-mix(in srgb, #f13242 ${Math.round((u - 0.80) / 0.15 * 100)}%, #ff8c00)`
+					: u > 0.60 ? '#00ac3a'
+					: u > 0.30 ? `color-mix(in srgb, #ff8c00 ${Math.round((1 - (u - 0.30) / 0.30) * 100)}%, #00ac3a)`
+					: u > 0.10 ? '#ff8c00'
+					: '#f13242'}
 					<div class="util-bar">
 						<div class="util-fill" style="width: {Math.min(utilPct, 100)}%; background: {utilColor}"></div>
 					</div>
-					<span class="util-label" style="color: {utilColor}">{utilPct}% utilization</span>
+					<span class="util-label" style="color: {utilColor}">{utilPct === 0 && results.utilization > 0 ? '<1' : utilPct}% utilization</span>
 				{/if}
 			</div>
 
+			<div class="inline-sources">
+				<a class="inline-source" href="https://nvidia.github.io/TensorRT-LLM/performance/perf-overview.html" target="_blank" rel="noopener">throughput: NVIDIA TensorRT-LLM</a>
+				<a class="inline-source" href="https://aws.amazon.com/ec2/capacityblocks/pricing/" target="_blank" rel="noopener">pricing: AWS capacity blocks</a>
+			</div>
 			<div class="nav-row">
 				<button class="nav-btn" onclick={prevStep}>← back</button>
 				<button class="nav-btn" onclick={nextStep}>next →</button>
@@ -749,20 +830,20 @@
 				<div class="breakdown-section">
 					<span class="breakdown-header">configuration</span>
 					<button class="breakdown-row" onclick={() => pushParams({ step: 'model' })}>
-						<span class="breakdown-label">api model</span>
+						<span class="breakdown-label">generalist model</span>
 						<span class="breakdown-value">{apiModel.name} <span class="breakdown-detail">${apiModel.inputPer1M}/${apiModel.outputPer1M} per 1M</span></span>
 					</button>
 					<button class="breakdown-row" onclick={() => pushParams({ step: 'size' })}>
 						<span class="breakdown-label">specialist</span>
 						<span class="breakdown-value">{activeSizeInfo.name} <span class="breakdown-detail">{activeSizeInfo.suited}</span></span>
 					</button>
-					<button class="breakdown-row" onclick={() => pushParams({ step: 'precision' })}>
+					<button class="breakdown-row" onclick={() => pushParams({ step: 'gpu' })}>
 						<span class="breakdown-label">precision</span>
 						<span class="breakdown-value">{precInfo.name}</span>
 					</button>
 					<button class="breakdown-row" onclick={() => pushParams({ step: 'workload' })}>
 						<span class="breakdown-label">volume</span>
-						<span class="breakdown-value">{formatNum(monthlyTokens)} tokens/mo <span class="breakdown-detail">{inputRatio}:{100 - inputRatio} in:out</span></span>
+						<span class="breakdown-value">{formatNum(monthlyTokens)} tokens/mo <span class="breakdown-detail">{hasCallsMode ? `${formatNum(callsPerMonth)} calls × ${formatNum(tokensPerCall)} tok` : ''} · {inputRatio}:{100 - inputRatio} in:out</span></span>
 					</button>
 					<button class="breakdown-row" onclick={() => pushParams({ step: 'gpu' })}>
 						<span class="breakdown-label">infrastructure</span>
@@ -1049,7 +1130,7 @@
 		flex: 1;
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: 20px;
 		min-height: 0;
 		overflow-y: auto;
 		padding-right: 8px;
@@ -1060,6 +1141,14 @@
 		font-size: 18px;
 		font-weight: 700;
 		color: var(--text);
+	}
+
+	.step-subtitle {
+		font-family: var(--font-body);
+		font-size: 13px;
+		color: var(--text-dim);
+		margin: -12px 0 0;
+		line-height: 1.5;
 	}
 
 	/* === Model grid === */
@@ -1173,7 +1262,7 @@
 	.workload-group {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: 8px;
 	}
 
 	.workload-row {
@@ -1228,6 +1317,58 @@
 
 	.workload-slider {
 		width: 100%;
+	}
+
+	.task-hints {
+		display: flex;
+		gap: 12px;
+		justify-content: center;
+	}
+
+	.task-hint {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--text-muted);
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		transition: color 150ms ease;
+	}
+
+	.task-hint:hover { color: var(--text-body); }
+	.task-hint.active { color: var(--text-body); }
+
+	.workload-total {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		padding: 12px 14px;
+		background: rgba(10, 10, 12, 0.8);
+		border: 1px solid var(--rule);
+		border-radius: 6px;
+	}
+
+	.workload-total-label {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+	}
+
+	.workload-total-value {
+		font-family: var(--font-mono);
+		font-size: 16px;
+		font-weight: 700;
+		color: var(--text);
+	}
+
+	.workload-total-unit {
+		font-weight: 400;
+		font-size: 12px;
+		color: var(--text-dim);
+		margin-left: 4px;
 	}
 
 	.more-toggle {
@@ -1695,6 +1836,22 @@
 	.report-cta:hover .cta-arrow {
 		color: var(--text);
 	}
+
+	.inline-sources {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.inline-source {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--text-faint);
+		text-decoration: none;
+		transition: color 150ms ease;
+	}
+
+	.inline-source:hover { color: var(--text-muted); }
 
 	@media (max-width: 768px) {
 		.gen-shape { width: 96px; height: 96px; }

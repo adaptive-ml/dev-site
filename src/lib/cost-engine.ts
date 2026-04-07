@@ -2,9 +2,7 @@ import prices from './generated/api-prices.json';
 
 const HOURS_PER_MONTH = 730;
 const DAYS_PER_MONTH = 30;
-// Real-world batched multiplier from TCO whitepaper: 14B model → 360 TPS batched
-// vs 55 TPS single-request = ~6.5× multiplier. Conservative for production use.
-const BATCH_MULTIPLIER = 7;
+const TARGET_UTILIZATION = 0.7;
 
 // GPU hardware specs and cloud pricing (Q2 2026 snapshot)
 export interface GpuSpec {
@@ -14,48 +12,68 @@ export interface GpuSpec {
 	bandwidthGbps: number;
 	costPerHour: number;
 	provider: string;
+	packSize: number;
 }
 
-// Pricing: AWS capacity block (reserved, 24/7). TCO whitepaper uses $31.46/node-hr
-// for p5.48xlarge (8× H100) = $3.93/GPU-hr. H200 scaled proportionally from on-demand ratio.
+// Pricing: AWS capacity blocks / on-demand (Q2 2026).
+// H100: p5.48xlarge capacity block $31.46/node-hr ÷ 8 = $3.93/GPU-hr.
+// H200: p5en capacity block $41.61/node-hr ÷ 8 = $5.20/GPU-hr.
 export const PRIMARY_GPUS: GpuSpec[] = [
-	{ id: 'h200_sxm', name: 'H200 SXM', memoryGb: 141, bandwidthGbps: 4800, costPerHour: 2.97, provider: 'AWS' },
+	{ id: 'h200_sxm', name: 'H200 SXM', memoryGb: 141, bandwidthGbps: 4800, costPerHour: 5.20, provider: 'AWS', packSize: 8 },
 ];
 
 const OTHER_GPUS: GpuSpec[] = [
-	{ id: 'h100_sxm', name: 'H100 SXM', memoryGb: 80, bandwidthGbps: 3355, costPerHour: 3.93, provider: 'AWS' },
-	{ id: 'l40s', name: 'L40S', memoryGb: 48, bandwidthGbps: 864, costPerHour: 1.86, provider: 'AWS' },
-	{ id: 'l4', name: 'L4', memoryGb: 24, bandwidthGbps: 300, costPerHour: 0.81, provider: 'GCP' },
-	{ id: 't4', name: 'T4', memoryGb: 16, bandwidthGbps: 320, costPerHour: 0.35, provider: 'GCP' },
+	{ id: 'h100_sxm', name: 'H100 SXM', memoryGb: 80, bandwidthGbps: 3355, costPerHour: 3.93, provider: 'AWS', packSize: 8 },
+	{ id: 'l40s', name: 'L40S', memoryGb: 48, bandwidthGbps: 864, costPerHour: 1.86, provider: 'AWS', packSize: 4 },
 ];
 
 export const GPU_OPTIONS: GpuSpec[] = [...PRIMARY_GPUS, ...OTHER_GPUS];
 
-// Throughput anchors for H100 SXM (reference GPU).
-// Other GPUs scale by memory bandwidth ratio.
-const H100_BANDWIDTH = 3355;
-const H100_ANCHORS: [number, number][] = [
-	[4, 200], [8, 100], [14, 55], [32, 26], [70, 12], [405, 2],
+// Batched throughput anchors for H100 SXM at FP16 (tok/s per GPU).
+// Based on production benchmarks: vLLM/TensorRT-LLM with continuous batching,
+// moderate concurrency, ShareGPT-like workloads. Conservative vs peak synthetic.
+// Sources: NVIDIA TensorRT-LLM perf docs, Anyscale benchmarks, Baseten H200 eval.
+const H100_FP16_ANCHORS: [number, number][] = [
+	[4, 15000], [8, 10000], [14, 6000], [32, 2500], [70, 800], [405, 150],
 ];
 
-function estimateThroughput(paramsBillions: number, gpu: GpuSpec = GPU_OPTIONS[0]): number {
-	const scale = gpu.bandwidthGbps / H100_BANDWIDTH;
-	let base: number;
-	if (paramsBillions <= H100_ANCHORS[0][0]) {
-		base = H100_ANCHORS[0][1];
-	} else if (paramsBillions >= H100_ANCHORS[H100_ANCHORS.length - 1][0]) {
-		base = H100_ANCHORS[H100_ANCHORS.length - 1][1];
-	} else {
-		base = H100_ANCHORS[H100_ANCHORS.length - 1][1];
-		for (let i = 0; i < H100_ANCHORS.length - 1; i++) {
-			const [p0, t0] = H100_ANCHORS[i];
-			const [p1, t1] = H100_ANCHORS[i + 1];
-			if (paramsBillions >= p0 && paramsBillions <= p1) {
-				const frac = Math.log(paramsBillions / p0) / Math.log(p1 / p0);
-				base = t0 * Math.pow(t1 / t0, frac);
-				break;
-			}
+// H200/H100 throughput ratio is model-size-dependent:
+// small models are compute-bound (modest gain), large models are memory-bound (bigger gain).
+// Capped at ~1.43x (bandwidth ratio 4800/3355). Sources: Baseten H200 eval, TRT-LLM perf docs.
+const H200_RATIO_ANCHORS: [number, number][] = [
+	[4, 1.10], [8, 1.10], [14, 1.15], [32, 1.25], [70, 1.40], [405, 1.43],
+];
+
+// GPU scaling relative to H100. H200 uses size-dependent ratio above.
+// L40S uses blended compute+bandwidth scaling (Koyeb, cuDo benchmarks).
+const H100_BANDWIDTH = 3355;
+const GPU_SCALE_OVERRIDES: Record<string, number> = {
+	l40s: 0.37,
+};
+
+function interpolateAnchors(paramsBillions: number, anchors: [number, number][]): number {
+	if (paramsBillions <= anchors[0][0]) return anchors[0][1];
+	if (paramsBillions >= anchors[anchors.length - 1][0]) return anchors[anchors.length - 1][1];
+	for (let i = 0; i < anchors.length - 1; i++) {
+		const [p0, v0] = anchors[i];
+		const [p1, v1] = anchors[i + 1];
+		if (paramsBillions >= p0 && paramsBillions <= p1) {
+			const frac = Math.log(paramsBillions / p0) / Math.log(p1 / p0);
+			return v0 * Math.pow(v1 / v0, frac);
 		}
+	}
+	return anchors[anchors.length - 1][1];
+}
+
+function estimateThroughput(paramsBillions: number, gpu: GpuSpec = GPU_OPTIONS[0]): number {
+	const base = interpolateAnchors(paramsBillions, H100_FP16_ANCHORS);
+	let scale: number;
+	if (gpu.id === 'h200_sxm') {
+		scale = interpolateAnchors(paramsBillions, H200_RATIO_ANCHORS);
+	} else if (gpu.id === 'h100_sxm') {
+		scale = 1;
+	} else {
+		scale = GPU_SCALE_OVERRIDES[gpu.id] ?? gpu.bandwidthGbps / H100_BANDWIDTH;
 	}
 	return Math.round(base * scale);
 }
@@ -74,11 +92,13 @@ export type Precision = 'fp8' | 'fp16' | 'int8' | 'int4' | 'bf16';
 
 interface PrecisionInfo { id: Precision; name: string; bytesPerParam: number; throughputMultiplier: number }
 
+// Throughput multipliers relative to FP16 anchors. FP8 theoretical is 2x but real-world
+// serving (mixed prefill+decode) averages ~1.6x. Sources: Baseten, Qwen3 benchmarks.
 export const PRECISION_OPTIONS: PrecisionInfo[] = [
-	{ id: 'fp8', name: 'FP8', bytesPerParam: 1, throughputMultiplier: 2 },
+	{ id: 'fp8', name: 'FP8', bytesPerParam: 1, throughputMultiplier: 1.6 },
 	{ id: 'fp16', name: 'FP16', bytesPerParam: 2, throughputMultiplier: 1 },
-	{ id: 'int8', name: 'INT8', bytesPerParam: 1, throughputMultiplier: 2 },
-	{ id: 'int4', name: 'INT4 (GPTQ/AWQ)', bytesPerParam: 0.5, throughputMultiplier: 4 },
+	{ id: 'int8', name: 'INT8', bytesPerParam: 1, throughputMultiplier: 1.6 },
+	{ id: 'int4', name: 'INT4 (GPTQ/AWQ)', bytesPerParam: 0.5, throughputMultiplier: 2.5 },
 	{ id: 'bf16', name: 'BF16', bytesPerParam: 2, throughputMultiplier: 1 },
 ];
 
@@ -116,12 +136,12 @@ export function calculate(inputs: CalcInputs): CalcOutputs {
 	const monthlyApiCost = (monthlyTokens / 1_000_000) * blendedPer1M;
 
 	const paramsB = customParamsB ?? SIZE_TO_PARAMS[modelSize];
-	// FP16 throughput anchors × precision multiplier (FP8 = 2× from halved memory bandwidth)
-	const singleThroughput = estimateThroughput(paramsB, gpu) * precisionInfo.throughputMultiplier;
-	const batchedThroughput = singleThroughput * BATCH_MULTIPLIER;
+	// Anchors are batched FP16 throughput; precision multiplier scales from there
+	const batchedThroughput = estimateThroughput(paramsB, gpu) * precisionInfo.throughputMultiplier;
 
 	const tokensPerSecond = monthlyTokens / (DAYS_PER_MONTH * 24 * 3600);
-	const gpusAuto = Math.max(1, Math.ceil(tokensPerSecond / batchedThroughput));
+	const gpusRaw = Math.max(1, Math.ceil(tokensPerSecond / (batchedThroughput * TARGET_UTILIZATION)));
+	const gpusAuto = Math.ceil(gpusRaw / gpu.packSize) * gpu.packSize;
 	const gpusUsed = gpuCountOverride ?? gpusAuto;
 	const totalCapacity = gpusUsed * batchedThroughput;
 	const utilization = totalCapacity > 0 ? tokensPerSecond / totalCapacity : 0;
