@@ -4,7 +4,7 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import symbolSvg from '$logos/symbol/symbol-white.svg?raw';
-	import { calculate, PRIMARY_MODELS, ALL_MODELS, MODEL_SIZES, OTHER_SIZES, PRIMARY_GPUS, GPU_OPTIONS, PRECISION_OPTIONS, type ApiModel, type ModelSize, type GpuSpec, type Precision } from '$lib/cost-engine';
+	import { calculate, PRIMARY_MODELS, ALL_MODELS, MODEL_SIZES, OTHER_SIZES, GPU_OPTIONS, PRECISION_OPTIONS, type ApiModel, type ModelSize, type GpuSpec, type Precision } from '$lib/cost-engine';
 
 	function autoFocus(node: HTMLInputElement) { node.focus(); node.select(); }
 
@@ -19,9 +19,6 @@
 	let customSizeParamsB = $state(10);
 	let editingGpuCount = $state(false);
 	let gpuCountInputVal = $state('');
-	let showMoreGpus = $state(false);
-	let customGpuActive = $state(false);
-	let customGpuRate = $state(3.0);
 	let hoveredPrecision = $state<Precision | null>(null);
 	let hoveredGpu = $state<GpuSpec | null>(null);
 	let activeHelp = $state<string | null>(null);
@@ -87,8 +84,7 @@
 
 	const inputRatio = $derived(Number(params.get('ratio')) || 75);
 	const precision = $derived<Precision>((params.get('prec') as Precision) || 'fp8');
-	const customGpu: GpuSpec = $derived({ id: 'custom', name: 'Custom', memoryGb: 80, bandwidthGbps: 3355, costPerHour: customGpuRate, provider: '', packSize: 1 });
-	const selectedGpu = $derived(params.get('gpu') === 'custom' ? customGpu : (GPU_OPTIONS.find(g => g.id === params.get('gpu')) ?? GPU_OPTIONS[0]));
+	const selectedGpu = $derived(GPU_OPTIONS.find(g => g.id === params.get('gpu')) ?? GPU_OPTIONS[0]);
 	const gpuCountMode = $derived<'auto' | 'manual'>(params.get('gpus') ? 'manual' : 'auto');
 	const gpuCountManual = $derived(Number(params.get('gpus')) || 1);
 
@@ -141,7 +137,7 @@
 	$effect(() => { if (tokensPerCall > 0) tpcSlider = tpcToSlider(tokensPerCall); });
 	let showAdvancedWorkload = $state(false);
 	let showMoreGpuOptions = $state(false);
-	$effect(() => { step; showOther = false; showMoreSizes = false; customInput = false; customSizeActive = false; showMoreGpus = false; customGpuActive = false; showAdvancedWorkload = false; showMoreGpuOptions = false; });
+	$effect(() => { step; showOther = false; showMoreSizes = false; customInput = false; customSizeActive = false; showAdvancedWorkload = false; showMoreGpuOptions = false; });
 
 	let customModel = $state<ApiModel>({ id: 'custom', name: 'Custom', provider: '', inputPer1M: 5.0, outputPer1M: 5.0 });
 
@@ -684,7 +680,7 @@
 			</div>
 			{#if activeHelp === 'gpu-type'}<span class="help-text">the gpu used to serve your model. faster gpus cost more per hour but serve more tokens, often lowering total cost.</span>{/if}
 			<div class="gpu-grid">
-				{#each (showMoreGpus ? GPU_OPTIONS : PRIMARY_GPUS) as gpu}
+				{#each GPU_OPTIONS as gpu}
 					<button
 						class="gpu-card"
 						class:selected={selectedGpu.id === gpu.id}
@@ -696,22 +692,6 @@
 						<span class="gpu-meta">{gpu.memoryGb} GB · ${gpu.costPerHour}/hr</span>
 					</button>
 				{/each}
-				{#if showMoreGpus}
-					<button class="gpu-card other-card" class:selected={customGpuActive} onclick={() => { if (!customGpuActive) { customGpuActive = true; replaceParams({ gpu: 'custom' }); } }}>
-						<span class="gpu-name">custom: $<input
-							class="custom-inline-input"
-							type="text"
-							inputmode="decimal"
-							value={customGpuActive ? customGpuRate.toFixed(2) : '3.00'}
-							onfocus={() => { if (!customGpuActive) { customGpuActive = true; replaceParams({ gpu: 'custom' }); } }}
-							oninput={(e) => { const v = parseFloat(e.currentTarget.value); if (!isNaN(v) && v > 0) { customGpuRate = v; } }}
-						/>/hr</span>
-					</button>
-				{:else}
-					<button class="gpu-card other-card" onclick={() => { showMoreGpus = true; }}>
-						<span class="gpu-name">more</span>
-					</button>
-				{/if}
 			</div>
 			{#if results && !results.modelFitsGpu}
 				{@const bytesPerParam = PRECISION_OPTIONS.find(p => p.id === precision)?.bytesPerParam ?? 1}
