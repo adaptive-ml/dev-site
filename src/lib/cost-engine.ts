@@ -15,15 +15,16 @@ export interface GpuSpec {
 	packSize: number;
 }
 
-// Pricing: AWS capacity blocks / on-demand (Q2 2026).
-// H100: p5.48xlarge capacity block $31.46/node-hr ÷ 8 = $3.93/GPU-hr.
-// H200: p5en capacity block $41.61/node-hr ÷ 8 = $5.20/GPU-hr.
+// Pricing: AWS, per-accelerator (instance price ÷ GPUs per node).
+// H100: p5.48xlarge capacity block $34.61/node-hr ÷ 8 = $4.33/GPU-hr.
+// H200: p5en.48xlarge capacity block $41.61/node-hr ÷ 8 = $5.20/GPU-hr.
+// L40S: g6e.xlarge on-demand $1.86/GPU-hr.
 export const PRIMARY_GPUS: GpuSpec[] = [
 	{ id: 'h200_sxm', name: 'H200 SXM', memoryGb: 141, bandwidthGbps: 4800, costPerHour: 5.20, provider: 'AWS', packSize: 8 },
 ];
 
 const OTHER_GPUS: GpuSpec[] = [
-	{ id: 'h100_sxm', name: 'H100 SXM', memoryGb: 80, bandwidthGbps: 3355, costPerHour: 3.93, provider: 'AWS', packSize: 8 },
+	{ id: 'h100_sxm', name: 'H100 SXM', memoryGb: 80, bandwidthGbps: 3355, costPerHour: 4.33, provider: 'AWS', packSize: 8 },
 	{ id: 'l40s', name: 'L40S', memoryGb: 48, bandwidthGbps: 864, costPerHour: 1.86, provider: 'AWS', packSize: 4 },
 ];
 

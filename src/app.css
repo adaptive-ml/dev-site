@@ -4,11 +4,11 @@
 :root {
 	--void: #000000;
 
-	--text: #ffffff;
+	--text: #f0f0f0;
 	--text-body: #d9d9d9;
-	--text-dim: #b0b0b0;
-	--text-muted: #858585;
-	--text-faint: #555555;
+	--text-dim: #b3b3b3;
+	--text-muted: #959595;
+	--text-faint: #616161;
 
 	--rule: rgba(255, 255, 255, 0.30);
 	--rule-strong: rgba(255, 255, 255, 0.45);

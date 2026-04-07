@@ -837,17 +837,13 @@
 						<span class="breakdown-label">specialist</span>
 						<span class="breakdown-value">{activeSizeInfo.name} <span class="breakdown-detail">{activeSizeInfo.suited}</span></span>
 					</button>
-					<button class="breakdown-row" onclick={() => pushParams({ step: 'gpu' })}>
-						<span class="breakdown-label">precision</span>
-						<span class="breakdown-value">{precInfo.name}</span>
-					</button>
 					<button class="breakdown-row" onclick={() => pushParams({ step: 'workload' })}>
 						<span class="breakdown-label">volume</span>
 						<span class="breakdown-value">{formatNum(monthlyTokens)} tokens/mo <span class="breakdown-detail">{hasCallsMode ? `${formatNum(callsPerMonth)} calls × ${formatNum(tokensPerCall)} tok` : ''} · {inputRatio}:{100 - inputRatio} in:out</span></span>
 					</button>
 					<button class="breakdown-row" onclick={() => pushParams({ step: 'gpu' })}>
 						<span class="breakdown-label">infrastructure</span>
-						<span class="breakdown-value">{results.gpusUsed}× {selectedGpu.name} <span class="breakdown-detail">${selectedGpu.costPerHour}/hr each</span></span>
+						<span class="breakdown-value">{results.gpusUsed}× {selectedGpu.name} <span class="breakdown-detail">{precInfo.name} · ${selectedGpu.costPerHour}/hr each</span></span>
 					</button>
 				</div>
 			</div>
@@ -1232,6 +1228,7 @@
 	.sc-label {
 		font-weight: 400;
 		color: var(--text-muted);
+		margin-left: 0.4em;
 	}
 
 	.sc-suited {
