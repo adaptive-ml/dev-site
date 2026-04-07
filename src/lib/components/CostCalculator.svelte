@@ -490,7 +490,7 @@
 		{#if step === 'model'}
 			<h2 class="prompt">choose a generalist model <button class="help-btn" onclick={() => toggleHelp('model')}>?</button></h2>
 			<p class="step-subtitle">compare the cost of a generalist API model to a self-hosted specialist model at scale.</p>
-			{#if activeHelp === 'model'}<span class="help-text">the generalist model sets your baseline cost per token. the calculator compares it against self-hosting a smaller, task-specific model.</span>{/if}
+			{#if activeHelp === 'model'}<span class="help-text">sets the baseline cost per token. compared against self-hosting a smaller, <a href="/rlops/specialization">specialized</a> model.</span>{/if}
 			<div class="model-grid">
 				{#each PRIMARY_MODELS as model}
 					{@const logo = VENDOR_LOGOS[model.provider.toLowerCase()]}
@@ -548,7 +548,7 @@
 			</div>
 		{:else if step === 'size'}
 			<h2 class="prompt">choose a specialist size <button class="help-btn" onclick={() => toggleHelp('size')}>?</button></h2>
-			{#if activeHelp === 'size'}<span class="help-text">a specialist is a small open-source model fine-tuned for one task. smaller models cost less to serve but handle fewer tasks.</span>{/if}
+			{#if activeHelp === 'size'}<span class="help-text">a small open-source model <a href="/training/post-training/sft">fine-tuned</a> for one task. smaller models cost less to serve but handle fewer tasks.</span>{/if}
 			<div class="size-grid">
 				{#each MODEL_SIZES as size}
 					<button
@@ -662,7 +662,7 @@
 						<span class="workload-label">input : output <button class="help-btn" onclick={() => toggleHelp('ratio')}>?</button></span>
 						<span class="workload-value static">{inputRatio}:{100 - inputRatio}</span>
 					</div>
-					{#if activeHelp === 'ratio'}<span class="help-text">ratio of input to output tokens. output tokens cost more on most apis. most workloads are input-heavy (80:20).</span>{/if}
+					{#if activeHelp === 'ratio'}<span class="help-text">ratio of input to output tokens. output tokens cost more on most APIs. most workloads are input-heavy (80:20).</span>{/if}
 					<input type="range" min="10" max="95" step="5" value={inputRatio} oninput={(e) => replaceParams({ ratio: e.currentTarget.value })} class="slider workload-slider" />
 				</div>
 				<button class="more-toggle" onclick={() => { showAdvancedWorkload = false; }}>▴ less</button>
@@ -678,7 +678,7 @@
 			<div class="workload-row">
 				<span class="workload-label">gpu type <button class="help-btn" onclick={() => toggleHelp('gpu-type')}>?</button></span>
 			</div>
-			{#if activeHelp === 'gpu-type'}<span class="help-text">the gpu used to serve your model. faster gpus cost more per hour but serve more tokens, often lowering total cost.</span>{/if}
+			{#if activeHelp === 'gpu-type'}<span class="help-text">the GPU used to serve your model. faster GPUs cost more per hour but serve more tokens, often lowering cost per token.</span>{/if}
 			<div class="gpu-grid">
 				{#each GPU_OPTIONS as gpu}
 					<button
@@ -703,7 +703,7 @@
 					<div class="workload-row">
 						<span class="workload-label">precision <button class="help-btn" onclick={() => toggleHelp('precision')}>?</button></span>
 					</div>
-					{#if activeHelp === 'precision'}<span class="help-text">lower precision uses less memory and increases throughput. fp8 is standard for production with negligible quality loss.</span>{/if}
+					{#if activeHelp === 'precision'}<span class="help-text">lower precision uses less memory and increases throughput. FP8 is standard for production inference.</span>{/if}
 					<div class="size-grid">
 						{#each PRECISION_OPTIONS as p}
 							<button
@@ -725,7 +725,7 @@
 
 			<div class="adv-section">
 				<span class="workload-label">gpu count <button class="help-btn" onclick={() => toggleHelp('gpu-count')}>?</button></span>
-				{#if activeHelp === 'gpu-count'}<span class="help-text">number of gpus serving your model. auto targets ~70% utilization for production headroom. gpu count snaps to node pack sizes (e.g. 8 for H100/H200).</span>{/if}
+				{#if activeHelp === 'gpu-count'}<span class="help-text">number of GPUs serving your model. auto targets ~70% utilization for production headroom. count snaps to node pack sizes (e.g. 8 for H100/H200).</span>{/if}
 				<div class="count-controls">
 					<button class="count-mode" class:selected={gpuCountMode === 'auto'} onclick={() => { replaceParams({ gpus: '' }); }}>auto</button>
 					<button class="count-mode" class:selected={gpuCountMode === 'manual'} onclick={() => { replaceParams({ gpus: String(results?.gpusAuto ?? 1) }); }}>manual</button>
@@ -1632,6 +1632,16 @@
 		font-size: 12px;
 		color: var(--text-dim);
 		line-height: 1.5;
+	}
+
+	.help-text a {
+		color: var(--text-muted);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+
+	.help-text a:hover {
+		color: var(--text-body);
 	}
 
 
