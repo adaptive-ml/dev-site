@@ -4,19 +4,28 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import symbolSvg from '$logos/symbol/symbol-white.svg?raw';
-	import { calculate, PRIMARY_MODELS, ALL_MODELS, MODEL_SIZES, OTHER_SIZES, GPU_OPTIONS, PRECISION_OPTIONS, type ApiModel, type ModelSize, type GpuSpec, type Precision } from '$lib/cost-engine';
+	import { calculate, PRIMARY_MODELS, ALL_MODELS, GPU_OPTIONS, PRECISION_OPTIONS, MODEL_DATABASE, type ApiModel, type GpuSpec, type Precision, type ModelEntry } from '$lib/cost-engine';
+	import Fuse from 'fuse.js';
 
 	function autoFocus(node: HTMLInputElement) { node.focus(); node.select(); }
+	function clickOutside(node: HTMLElement, callback: () => void) {
+		function handle(e: MouseEvent) { if (!node.contains(e.target as Node)) callback(); }
+		document.addEventListener('click', handle, true);
+		return { destroy() { document.removeEventListener('click', handle, true); } };
+	}
 
 	// UI-only state
 	let showOther = $state(false);
-	let customInput = $state(false);
-	let customInputRate = $state(5.0);
 	let hoveredModelId = $state('');
 	let hoveredParamsB = $state<number | null>(null);
-	let showMoreSizes = $state(false);
-	let customSizeActive = $state(false);
-	let customSizeParamsB = $state(10);
+	let modelQuery = $state('');
+	let comboOpen = $state(false);
+	let comboInputEl = $state<HTMLInputElement>();
+	const modelFuse = new Fuse(MODEL_DATABASE, { keys: ['name', 'vendor'], threshold: 0.4, distance: 100 });
+	const filteredModels = $derived(modelQuery.length >= 2
+		? modelFuse.search(modelQuery).map(r => r.item)
+		: [...MODEL_DATABASE.filter(m => m.primary), ...MODEL_DATABASE.filter(m => !m.primary)]
+	);
 	let editingGpuCount = $state(false);
 	let gpuCountInputVal = $state('');
 	let hoveredPrecision = $state<Precision | null>(null);
@@ -33,33 +42,25 @@
 	const tokensPerCall = $derived(Number(params.get('tpc')) || 0);
 	const hasCallsMode = $derived(!!params.get('calls') && !!params.get('tpc'));
 	const monthlyTokens = $derived(hasCallsMode ? callsPerMonth * tokensPerCall : (Number(params.get('tok')) || 100_000_000_000));
-	const VALID_SIZES = new Set<string>(['4b', '8b', '14b', '32b']);
-	const rawSize = $derived(params.get('size') ?? '');
-	const selectedModelSize = $derived<ModelSize>(
-		VALID_SIZES.has(rawSize) ? rawSize as ModelSize
-		// legacy mappings
-		: rawSize === '7b' ? '8b'
-		: rawSize === '13b' ? '14b'
-		: rawSize === '70b' ? '32b'
-		: '8b'
-	);
+	const specialistName = $derived(params.get('specialist') ?? '');
+	const specialist = $derived(MODEL_DATABASE.find(m => m.name === specialistName) ?? null);
 	const stepParam = $derived(params.get('step') ?? '');
 
-	const STEPS = ['model', 'size', 'workload', 'gpu', 'report'] as const;
+	const STEPS = ['model', 'specialist', 'workload', 'gpu', 'report'] as const;
 	type Step = typeof STEPS[number];
 
 	const step = $derived<Step>(
 		stepParam === 'report' ? 'report'
 		: stepParam === 'gpu' || stepParam === 'gpus' ? 'gpu'
 		: stepParam === 'workload' || stepParam === 'tokens' || stepParam === 'ratio' || stepParam === 'done' ? 'workload'
-		: stepParam === 'precision' ? (rawSize ? 'gpu' : 'model')
-		: stepParam === 'size' ? (selectedApiModelId ? 'size' : 'model')
+		: stepParam === 'precision' ? (specialist ? 'gpu' : 'model')
+		: stepParam === 'specialist' || stepParam === 'size' ? (selectedApiModelId ? 'specialist' : 'model')
 		: 'model'
 	);
 
 	// Stamp defaults into URL when arriving at a step
 	$effect(() => {
-		if (step === 'workload' && !params.get('calls')) replaceParams({ calls: '50000000', tpc: '1500', tok: String(50000000 * 1500) });
+		if (step === 'workload' && !params.get('calls')) replaceParams({ calls: '10000000', tpc: '4000', tok: String(10000000 * 4000), ratio: '85' });
 		if (step === 'gpu' && !params.get('gpu')) replaceParams({ gpu: GPU_OPTIONS[0].id });
 		if (step === 'gpu' && !params.get('prec')) replaceParams({ prec: 'fp8' });
 	});
@@ -67,8 +68,8 @@
 	// A step is reachable if its param exists in the URL
 	const stepReachable = $derived.by(() => ({
 		model: true,
-		size: !!selectedApiModelId,
-		workload: !!rawSize,
+		specialist: !!selectedApiModelId,
+		workload: !!specialistName,
 		gpu: !!params.get('tok'),
 		report: !!params.get('gpu'),
 	}));
@@ -84,6 +85,7 @@
 
 	const inputRatio = $derived(Number(params.get('ratio')) || 75);
 	const precision = $derived<Precision>((params.get('prec') as Precision) || 'fp8');
+	const efficiency = $derived(Number(params.get('eff')) || 20);
 	const selectedGpu = $derived(GPU_OPTIONS.find(g => g.id === params.get('gpu')) ?? GPU_OPTIONS[0]);
 	const gpuCountMode = $derived<'auto' | 'manual'>(params.get('gpus') ? 'manual' : 'auto');
 	const gpuCountManual = $derived(Number(params.get('gpus')) || 1);
@@ -109,14 +111,21 @@
 		}
 		return closest;
 	}
-	let callsSlider = $state(callsToSlider(50_000_000));
+	let callsSlider = $state(callsToSlider(10_000_000));
 	$effect(() => { if (callsPerMonth > 0) callsSlider = callsToSlider(callsPerMonth); });
 
 	const TASK_PRESETS = [
-		{ label: 'classification', tpc: 500 },
-		{ label: 'chat', tpc: 1500 },
-		{ label: 'summarization', tpc: 3000 },
+		{ label: 'classification', tpc: 500, ratio: 95 },
+		{ label: 'chat', tpc: 2000, ratio: 80 },
+		{ label: 'RAG', tpc: 4000, ratio: 85 },
+		{ label: 'summarization', tpc: 5000, ratio: 90 },
 	] as const;
+	const activeTask = $derived(TASK_PRESETS.find(p => p.tpc === tokensPerCall && p.ratio === inputRatio) ?? null);
+
+	function selectTask(preset: typeof TASK_PRESETS[number]) {
+		const calls = callsPerMonth || 10000000;
+		replaceParams({ calls: String(calls), tpc: String(preset.tpc), tok: String(calls * preset.tpc), ratio: String(preset.ratio) });
+	}
 
 	// Tokens per call: snap-point slider, 50 to 100K
 	const TPC_STOPS: number[] = [50, 100, 200, 500, 1000, 1500, 2000, 3000, 4000, 8000, 16000, 32000, 64000, 100000];
@@ -133,13 +142,10 @@
 		}
 		return closest;
 	}
-	let tpcSlider = $state(tpcToSlider(1500));
+	let tpcSlider = $state(tpcToSlider(4000));
 	$effect(() => { if (tokensPerCall > 0) tpcSlider = tpcToSlider(tokensPerCall); });
-	let showAdvancedWorkload = $state(false);
 	let showMoreGpuOptions = $state(false);
-	$effect(() => { step; showOther = false; showMoreSizes = false; customInput = false; customSizeActive = false; showAdvancedWorkload = false; showMoreGpuOptions = false; });
-
-	let customModel = $state<ApiModel>({ id: 'custom', name: 'Custom', provider: '', inputPer1M: 5.0, outputPer1M: 5.0 });
+	$effect(() => { step; showOther = false; showMoreGpuOptions = false; modelQuery = ''; comboOpen = false; });
 
 	// Vendor logo SVG paths (monochrome, fill-based)
 	const VENDOR_LOGOS: Record<string, { viewBox: string; d: string }> = {
@@ -159,24 +165,13 @@
 
 	// Active model for visualization: hovered model takes priority
 	const activeModelId = $derived(hoveredModelId || selectedApiModelId);
-	const apiModel = $derived(
-		activeModelId === 'custom'
-			? customModel
-			: ALL_MODELS.find((m) => m.id === activeModelId)
-	);
+	const apiModel = $derived(ALL_MODELS.find((m) => m.id === activeModelId));
 	const activeVendor = $derived(apiModel ? apiModel.provider.toLowerCase() : '');
 	const activeLogo = $derived(VENDOR_LOGOS[activeVendor] ?? null);
-	const ALL_SIZES = [...MODEL_SIZES, ...OTHER_SIZES];
-	// Derive paramsB from URL size param: check known sizes first, then parse as number
-	const sizeParamsB = $derived.by(() => {
-		const known = ALL_SIZES.find((m) => m.id === rawSize);
-		if (known) return known.paramsB;
-		const n = parseFloat(rawSize);
-		if (!isNaN(n) && n > 0) return n;
-		return ALL_SIZES.find((m) => m.id === selectedModelSize)?.paramsB ?? 8;
-	});
-	const activeParamsB = $derived(hoveredParamsB ?? sizeParamsB);
-	const activeSizeLabel = $derived(activeParamsB ? `${activeParamsB}b` : '');
+	const activeSpecialist = $derived(hoveredParamsB ? MODEL_DATABASE.find(m => m.activeParamsB === hoveredParamsB) ?? specialist : specialist);
+	const activeParamsB = $derived(activeSpecialist?.activeParamsB ?? 8);
+	const activeTotalParamsB = $derived(activeSpecialist?.totalParamsB ?? activeParamsB);
+	const activeSizeLabel = $derived(activeSpecialist?.name ?? '');
 
 	// URL helpers
 	function pushParams(updates: Record<string, string>) {
@@ -310,7 +305,7 @@
 	});
 
 	const genActive = $derived(!!hoveredModelId || !!selectedApiModelId);
-	const specActive = $derived(!!hoveredParamsB || ((step === 'size' || step === 'workload' || step === 'gpu' || step === 'report') && !!rawSize));
+	const specActive = $derived(!!hoveredParamsB || ((step === 'specialist' || step === 'workload' || step === 'gpu' || step === 'report') && !!specialistName));
 
 	// Scale shapes by cost/size. Log scale for perceptual linearity.
 	// Generalist: blended $/1M → scale 0.7–1.2
@@ -332,7 +327,7 @@
 	const activeGpu = $derived(hoveredGpu ?? selectedGpu);
 	const results = $derived(
 		apiModel
-			? calculate({ monthlyTokens, apiModel, modelSize: selectedModelSize, customParamsB: hoveredParamsB ?? (sizeParamsB !== (ALL_SIZES.find(m => m.id === selectedModelSize)?.paramsB) ? sizeParamsB : undefined), inputRatio: inputRatio / 100, gpu: activeGpu, gpuCountOverride: gpuCountMode === 'manual' ? gpuCountManual : null, precision: activePrecision })
+			? calculate({ monthlyTokens, apiModel, activeParamsB, totalParamsB: activeTotalParamsB, inputRatio: inputRatio / 100, tokensPerCall: tokensPerCall || 4000, gpu: activeGpu, gpuCountOverride: gpuCountMode === 'manual' ? gpuCountManual : null, precision: activePrecision, efficiency: efficiency / 100 })
 			: null
 	);
 
@@ -353,15 +348,15 @@
 	}
 
 	function selectModel(id: string) {
-		customInput = false;
 		showOther = false;
 		replaceParams({ model: id });
 	}
 
-	function selectSize(sizeId: string) {
-		customSizeActive = false;
+	function selectSpecialist(m: ModelEntry) {
+		modelQuery = '';
+		comboOpen = false;
 		triggerSpin?.();
-		replaceParams({ size: sizeId });
+		replaceParams({ specialist: m.name });
 	}
 
 	function selectPrecision(precId: string) {
@@ -369,12 +364,12 @@
 	}
 
 	function updateCalls(calls: number) {
-		const tpc = tokensPerCall || 1500;
+		const tpc = tokensPerCall || 4000;
 		replaceParams({ calls: String(calls), tpc: String(tpc), tok: String(calls * tpc) });
 	}
 
 	function updateTpc(tpc: number) {
-		const calls = callsPerMonth || 50000000;
+		const calls = callsPerMonth || 10000000;
 		replaceParams({ calls: String(calls), tpc: String(tpc), tok: String(calls * tpc) });
 	}
 
@@ -407,6 +402,11 @@
 </script>
 
 <div class="calc">
+	<div class="calc-header">
+		<h1 class="calc-title">GPU cost calculator</h1>
+		<p class="calc-desc">compare the cost of a generalist model to a self-hosted specialist at scale</p>
+	</div>
+
 	<!-- Stepper -->
 	<div class="stepper">
 		{#each STEPS as s, i}
@@ -435,10 +435,10 @@
 
 		<div class="costs-row">
 			<span class="cost-val" class:has-data={genActive && !!results} class:hidden={!genActive}>
-				{genActive && results ? formatUsd(results.monthlyApiCost) : '$0.00'}<span class="cost-per">/mo</span>
+				{genActive && results ? formatUsd(results.monthlyApiCost * 12) : '$0.00'}<span class="cost-per">/yr</span>
 			</span>
 			<span class="cost-val" class:has-data={specActive && !!results} class:hidden={!specActive}>
-				{specActive && results ? formatUsd(results.monthlySelfHostedCost) : '$0.00'}<span class="cost-per">/mo</span>
+				{specActive && results ? formatUsd(results.monthlySelfHostedCost * 12) : '$0.00'}<span class="cost-per">/yr</span>
 			</span>
 		</div>
 
@@ -460,7 +460,7 @@
 						<svg viewBox="0 0 100 100" class="shape spec-shape" class:dim={!specActive} style="transform: scale({specActive ? specScale : 1})">
 							<path d={specPathLive} fill="none" stroke-width="1.4" transform="rotate({specRotation} {SPEC_CX} {SPEC_CY})" />
 							{#if specActive}
-								<text x={SPEC_CX} y={SPEC_CY + 1} text-anchor="middle" dominant-baseline="central" class="size-label">{activeSizeLabel}</text>
+								<text x={SPEC_CX} y={SPEC_CY + 1} text-anchor="middle" dominant-baseline="central" class="size-label">{activeParamsB}B</text>
 							{/if}
 						</svg>
 					</div>
@@ -489,8 +489,7 @@
 	<div class="controls">
 		{#if step === 'model'}
 			<h2 class="prompt">choose a generalist model <button class="help-btn" onclick={() => toggleHelp('model')}>?</button></h2>
-			<p class="step-subtitle">compare the cost of a generalist API model to a self-hosted specialist model at scale.</p>
-			{#if activeHelp === 'model'}<span class="help-text">sets the baseline cost per token. compared against self-hosting a smaller, <a href="/rlops/specialization">specialized</a> model.</span>{/if}
+			{#if activeHelp === 'model'}<span class="help-text">the API model you're paying for today. this calculator compares that cost against self-hosting.</span>{/if}
 			<div class="model-grid">
 				{#each PRIMARY_MODELS as model}
 					{@const logo = VENDOR_LOGOS[model.provider.toLowerCase()]}
@@ -525,81 +524,105 @@
 							<span class="mc-price">{model.provider} · ${model.inputPer1M} / ${model.outputPer1M} per 1M</span>
 						</button>
 					{/each}
-					<button class="model-card other-card" class:selected={customInput} onclick={() => { if (!customInput) { customInput = true; customModel = { id: 'custom', name: 'Custom', provider: '', inputPer1M: customInputRate, outputPer1M: customInputRate }; hoveredModelId = 'custom'; replaceParams({ model: 'custom' }); } }}>
-						<span class="mc-name">custom: $<input
-							class="custom-inline-input"
-							type="text"
-							inputmode="decimal"
-							value={customInput ? customInputRate.toFixed(2) : '5.00'}
-							onfocus={() => { if (!customInput) { customInput = true; customModel = { id: 'custom', name: 'Custom', provider: '', inputPer1M: customInputRate, outputPer1M: customInputRate }; hoveredModelId = 'custom'; replaceParams({ model: 'custom' }); } }}
-							oninput={(e) => { const v = parseFloat(e.currentTarget.value); if (!isNaN(v) && v > 0) { customInputRate = v; customModel = { id: 'custom', name: 'Custom', provider: '', inputPer1M: v, outputPer1M: v }; } }}
-						/>/1M</span>
-					</button>
 				{:else}
 					<button class="model-card other-card" onclick={() => { showOther = true; }}>
 						<span class="mc-name">more</span>
 					</button>
 				{/if}
 			</div>
-			<a class="inline-source" href="https://www.llm-prices.com" target="_blank" rel="noopener">pricing via llm-prices.com</a>
+			<details class="calc-methodology">
+				<summary class="methodology-toggle">how is this calculated?</summary>
+				<div class="methodology-body">
+					<p>API pricing from <a href="https://llm-prices.com" target="_blank" rel="noopener">llm-prices.com</a>. Input and output token prices are weighted by the input:output ratio from the workload step.</p>
+					<p><a href="https://github.com/adaptive-ml/dev-site/blob/main/src/lib/cost-engine.ts" target="_blank" rel="noopener">see the source code</a></p>
+				</div>
+			</details>
 			<div class="nav-row">
 				<span></span>
 				{#if selectedApiModelId}<button class="nav-btn" onclick={nextStep}>next →</button>{/if}
 			</div>
-		{:else if step === 'size'}
-			<h2 class="prompt">choose a specialist size <button class="help-btn" onclick={() => toggleHelp('size')}>?</button></h2>
-			{#if activeHelp === 'size'}<span class="help-text">a small open-source model <a href="/training/post-training/sft">fine-tuned</a> for one task. smaller models cost less to serve but handle fewer tasks.</span>{/if}
-			<div class="size-grid">
-				{#each MODEL_SIZES as size}
-					<button
-						class="size-card"
-						class:selected={rawSize === size.id}
-						onclick={() => selectSize(size.id)}
-						onmouseenter={() => { hoveredParamsB = size.paramsB; }}
-						onmouseleave={() => { hoveredParamsB = null; }}
-					>
-						<span class="sc-name">{size.name} <span class="sc-label">{size.label}</span></span>
-						<span class="sc-suited">{size.suited}</span>
-					</button>
-				{/each}
-				{#if showMoreSizes}
-					{#each OTHER_SIZES.sort((a, b) => a.paramsB - b.paramsB) as size}
-						<button
-							class="size-card"
-							class:selected={rawSize === size.id}
-							onclick={() => selectSize(size.id)}
-							onmouseenter={() => { hoveredParamsB = size.paramsB; }}
-							onmouseleave={() => { hoveredParamsB = null; }}
-						>
-							<span class="sc-name">{size.name}</span>
-							<span class="sc-suited">{size.suited}</span>
-						</button>
-					{/each}
-					<button class="size-card other-card" class:selected={customSizeActive} onclick={() => { if (!customSizeActive) { customSizeActive = true; customSizeParamsB = 10; hoveredParamsB = 10; replaceParams({ size: '10' }); } }}>
-						<span class="sc-name">custom: <input
-							class="custom-inline-input"
+		{:else if step === 'specialist'}
+			<h2 class="prompt">choose a specialist <button class="help-btn" onclick={() => toggleHelp('specialist')}>?</button></h2>
+			{#if activeHelp === 'specialist'}<span class="help-text">an <a href="/training">open model</a> <a href="/training/post-training/sft">fine-tuned</a> for your task using <a href="/optimization">RL</a>, then self-hosted on your own GPUs instead of calling an API.</span>{/if}
+
+			<div class="combo" class:open={comboOpen} use:clickOutside={() => { comboOpen = false; modelQuery = ''; }}>
+				<button
+					class="combo-trigger"
+					onclick={() => { comboOpen = !comboOpen; if (comboOpen) requestAnimationFrame(() => comboInputEl?.focus()); }}
+				>
+					{#if specialist}
+						<span class="combo-selected">{specialist.name}</span>
+						<span class="combo-selected-meta">{#if specialist.isMoE}{specialist.activeParamsB}B / {specialist.totalParamsB}B MoE{:else}{specialist.activeParamsB}B{/if}</span>
+					{:else}
+						<span class="combo-placeholder">select a model</span>
+					{/if}
+					<span class="combo-caret">{comboOpen ? '▴' : '▾'}</span>
+				</button>
+				{#if comboOpen}
+					<div class="combo-dropdown">
+						<input
+							class="combo-search"
 							type="text"
-							inputmode="numeric"
-							value={customSizeActive ? customSizeParamsB : 10}
-							onfocus={() => { if (!customSizeActive) { customSizeActive = true; customSizeParamsB = 10; hoveredParamsB = 10; replaceParams({ size: '10' }); } }}
-							oninput={(e) => { const v = parseInt(e.currentTarget.value); if (!isNaN(v) && v > 0) { customSizeParamsB = v; hoveredParamsB = v; replaceParams({ size: String(v) }); } }}
-						/>b</span>
-					</button>
-				{:else}
-					<button class="size-card other-card" onclick={() => { showMoreSizes = true; }}>
-						<span class="sc-name">more</span>
-					</button>
+							placeholder="search models..."
+							bind:value={modelQuery}
+							bind:this={comboInputEl}
+						/>
+						<div class="combo-list">
+							{#each filteredModels as m}
+								{@const isPrimary = !!m.primary}
+								{@const isFirst = m === filteredModels.find(f => !f.primary)}
+								{#if isFirst && !modelQuery}<div class="combo-divider"></div>{/if}
+								<button
+									class="combo-item"
+									class:selected={specialistName === m.name}
+									onclick={() => selectSpecialist(m)}
+									onmouseenter={() => { hoveredParamsB = m.activeParamsB; }}
+									onmouseleave={() => { hoveredParamsB = null; }}
+								>
+									<span class="combo-item-name">{#if isPrimary}<span class="combo-star">★</span> {/if}{m.name}</span>
+									<span class="combo-item-right">
+										<span class="combo-item-meta">{#if m.isMoE}{m.activeParamsB}B / {m.totalParamsB}B MoE{:else}{m.activeParamsB}B{/if}</span>
+										{#if m.suited}<span class="combo-item-suited">{m.suited}</span>{/if}
+										<a class="combo-item-hf" href={m.url} target="_blank" rel="noopener" onclick={(e) => e.stopPropagation()}>HF ↗</a>
+									</span>
+								</button>
+							{/each}
+						</div>
+					</div>
 				{/if}
 			</div>
+
+			<details class="calc-methodology">
+				<summary class="methodology-toggle">how is this calculated?</summary>
+				<div class="methodology-body">
+					<p>Throughput estimated from active parameters via a regression fit to <a href="https://nvidia.github.io/TensorRT-LLM/performance/perf-overview.html" target="_blank" rel="noopener">TRT-LLM v0.21 benchmarks</a>. For mixture-of-experts models, active parameters drive throughput; total parameters drive memory.</p>
+					<p><a href="https://github.com/adaptive-ml/dev-site/blob/main/src/lib/cost-engine.ts" target="_blank" rel="noopener">see the source code</a></p>
+				</div>
+			</details>
+
 			<div class="nav-row">
 				<button class="nav-btn" onclick={() => { hoveredParamsB = null; prevStep(); }}>← back</button>
-				{#if rawSize}<button class="nav-btn" onclick={() => { hoveredParamsB = null; nextStep(); }}>next →</button>{/if}
+				{#if specialistName}<button class="nav-btn" onclick={() => { hoveredParamsB = null; nextStep(); }}>next →</button>{/if}
 			</div>
 		{:else if step === 'workload'}
-			<h2 class="prompt">configure workload</h2>
+			<h2 class="prompt">configure workload <button class="help-btn" onclick={() => toggleHelp('workload')}>?</button></h2>
+			{#if activeHelp === 'workload'}<span class="help-text">how many requests you'll run and how large each one is. pick a task type to start, then adjust.</span>{/if}
+
+			<div class="task-selector">
+				{#each TASK_PRESETS as preset}
+					<button
+						class="task-btn"
+						class:active={activeTask?.label === preset.label}
+						onclick={() => selectTask(preset)}
+					>
+						<span class="task-btn-label">{preset.label}</span>
+					</button>
+				{/each}
+			</div>
+
 			<div class="workload-group">
 				<div class="workload-row">
-					<span class="workload-label">calls / month <button class="help-btn" onclick={() => toggleHelp('calls')}>?</button></span>
+					<span class="workload-label">calls / month</span>
 					{#if editingCalls}
 						<input
 							class="workload-input"
@@ -612,17 +635,16 @@
 							use:autoFocus
 						/>
 					{:else}
-						<button class="workload-value" onclick={() => { editingCalls = true; callsInputVal = formatNum(callsPerMonth || 50000000); }}>
-							{formatNum(callsPerMonth || 50000000)}
+						<button class="workload-value" onclick={() => { editingCalls = true; callsInputVal = formatNum(callsPerMonth || 10000000); }}>
+							{formatNum(callsPerMonth || 10000000)}
 						</button>
 					{/if}
 				</div>
-				{#if activeHelp === 'calls'}<span class="help-text">how many API calls per month. multiply by tokens per call to get total volume.</span>{/if}
 				<input type="range" min="0" max={CALLS_SNAPS.length - 1} step="1" bind:value={callsSlider} oninput={() => { updateCalls(sliderToCalls(callsSlider)); }} class="slider workload-slider" />
 			</div>
 			<div class="workload-group">
 				<div class="workload-row">
-					<span class="workload-label">tokens / call <button class="help-btn" onclick={() => toggleHelp('tpc')}>?</button></span>
+					<span class="workload-label">tokens / call</span>
 					{#if editingTpc}
 						<input
 							class="workload-input"
@@ -635,40 +657,24 @@
 							use:autoFocus
 						/>
 					{:else}
-						<button class="workload-value" onclick={() => { editingTpc = true; tpcInputVal = String(tokensPerCall || 1500); }}>
-							{formatNum(tokensPerCall || 1500)}
+						<button class="workload-value" onclick={() => { editingTpc = true; tpcInputVal = String(tokensPerCall || 4000); }}>
+							{formatNum(tokensPerCall || 4000)}
 						</button>
 					{/if}
 				</div>
-				{#if activeHelp === 'tpc'}<span class="help-text">average tokens per call. use the task hints to jump to a typical range.</span>{/if}
-				<div class="task-hints">
-					{#each TASK_PRESETS as preset}
-						<button
-							class="task-hint"
-							class:active={tokensPerCall === preset.tpc}
-							onclick={() => updateTpc(preset.tpc)}
-						>{preset.label}</button>
-					{/each}
-				</div>
 				<input type="range" min="0" max={TPC_STOPS.length - 1} step="1" bind:value={tpcSlider} oninput={() => { updateTpc(sliderToTpc(tpcSlider)); }} class="slider workload-slider" />
+			</div>
+			<div class="workload-group">
+				<div class="workload-row">
+					<span class="workload-label">input : output</span>
+					<span class="workload-value static">{inputRatio}:{100 - inputRatio}</span>
+				</div>
+				<input type="range" min="10" max="95" step="5" value={inputRatio} oninput={(e) => replaceParams({ ratio: e.currentTarget.value })} class="slider workload-slider" />
 			</div>
 			<div class="workload-total">
 				<span class="workload-total-label">total</span>
-				<span class="workload-total-value">{formatNum(monthlyTokens)}<span class="workload-total-unit"> tokens/mo</span></span>
+				<span class="workload-total-value">{formatNum(monthlyTokens * 12)}<span class="workload-total-unit"> tokens/yr</span></span>
 			</div>
-			{#if showAdvancedWorkload}
-				<div class="workload-group">
-					<div class="workload-row">
-						<span class="workload-label">input : output <button class="help-btn" onclick={() => toggleHelp('ratio')}>?</button></span>
-						<span class="workload-value static">{inputRatio}:{100 - inputRatio}</span>
-					</div>
-					{#if activeHelp === 'ratio'}<span class="help-text">ratio of input to output tokens. output tokens cost more on most APIs. most workloads are input-heavy (80:20).</span>{/if}
-					<input type="range" min="10" max="95" step="5" value={inputRatio} oninput={(e) => replaceParams({ ratio: e.currentTarget.value })} class="slider workload-slider" />
-				</div>
-				<button class="more-toggle" onclick={() => { showAdvancedWorkload = false; }}>▴ less</button>
-			{:else}
-				<button class="more-toggle" onclick={() => { showAdvancedWorkload = true; }}>▾ more</button>
-			{/if}
 			<div class="nav-row">
 				<button class="nav-btn" onclick={prevStep}>← back</button>
 				<button class="nav-btn" onclick={nextStep}>next →</button>
@@ -678,7 +684,7 @@
 			<div class="workload-row">
 				<span class="workload-label">gpu type <button class="help-btn" onclick={() => toggleHelp('gpu-type')}>?</button></span>
 			</div>
-			{#if activeHelp === 'gpu-type'}<span class="help-text">the GPU used to serve your model. faster GPUs cost more per hour but serve more tokens, often lowering cost per token.</span>{/if}
+			{#if activeHelp === 'gpu-type'}<span class="help-text">the GPU that runs your model. faster GPUs cost more per hour but serve more traffic, so fewer may be needed.</span>{/if}
 			<div class="gpu-grid">
 				{#each GPU_OPTIONS as gpu}
 					<button
@@ -695,15 +701,26 @@
 			</div>
 			{#if results && !results.modelFitsGpu}
 				{@const bytesPerParam = PRECISION_OPTIONS.find(p => p.id === precision)?.bytesPerParam ?? 1}
-				<span class="gpu-warning">{activeSizeLabel} needs {Math.ceil(activeParamsB * bytesPerParam)} GB in {activePrecision.toUpperCase()}. {activeGpu.name} has {activeGpu.memoryGb} GB.</span>
+				<span class="gpu-warning">{activeSizeLabel} needs {Math.ceil(activeTotalParamsB * bytesPerParam)} GB in {activePrecision.toUpperCase()}. {activeGpu.name} has {activeGpu.memoryGb} GB.</span>
 			{/if}
 
 			{#if showMoreGpuOptions}
 				<div class="workload-group">
 					<div class="workload-row">
+						<span class="workload-label">efficiency <button class="help-btn" onclick={() => toggleHelp('efficiency')}>?</button></span>
+						<span class="workload-value static">{efficiency}%</span>
+					</div>
+					{#if activeHelp === 'efficiency'}<span class="help-text">what fraction of peak speed you'll actually get in production. the gap comes from latency constraints, uneven traffic, and serving overhead.</span>{/if}
+					<input type="range" min="5" max="100" step="5" value={efficiency} oninput={(e) => replaceParams({ eff: e.currentTarget.value })} class="slider workload-slider" />
+					{#if results}
+						<span class="tps-estimate">{Math.round(results.outputThroughput * efficiency / 100)} output tok/s</span>
+					{/if}
+				</div>
+				<div class="workload-group">
+					<div class="workload-row">
 						<span class="workload-label">precision <button class="help-btn" onclick={() => toggleHelp('precision')}>?</button></span>
 					</div>
-					{#if activeHelp === 'precision'}<span class="help-text">lower precision uses less memory and increases throughput. FP8 is standard for production inference.</span>{/if}
+					{#if activeHelp === 'precision'}<span class="help-text">how precisely the model's weights are stored. lower precision uses less memory and runs faster. FP8 is standard for most models.</span>{/if}
 					<div class="size-grid">
 						{#each PRECISION_OPTIONS as p}
 							<button
@@ -725,7 +742,7 @@
 
 			<div class="adv-section">
 				<span class="workload-label">gpu count <button class="help-btn" onclick={() => toggleHelp('gpu-count')}>?</button></span>
-				{#if activeHelp === 'gpu-count'}<span class="help-text">number of GPUs serving your model. auto targets ~70% utilization for production headroom. count snaps to node pack sizes (e.g. 8 for H100/H200).</span>{/if}
+				{#if activeHelp === 'gpu-count'}<span class="help-text">how many GPUs to run your model on. auto-calculated from your workload and efficiency, rounded up to node boundaries (e.g. 8 GPUs per H100 node).</span>{/if}
 				<div class="count-controls">
 					<button class="count-mode" class:selected={gpuCountMode === 'auto'} onclick={() => { replaceParams({ gpus: '' }); }}>auto</button>
 					<button class="count-mode" class:selected={gpuCountMode === 'manual'} onclick={() => { replaceParams({ gpus: String(results?.gpusAuto ?? 1) }); }}>manual</button>
@@ -769,10 +786,17 @@
 				{/if}
 			</div>
 
-			<div class="inline-sources">
-				<a class="inline-source" href="https://nvidia.github.io/TensorRT-LLM/performance/perf-overview.html" target="_blank" rel="noopener">throughput: NVIDIA TensorRT-LLM</a>
-				<a class="inline-source" href="https://aws.amazon.com/ec2/capacityblocks/pricing/" target="_blank" rel="noopener">pricing: AWS capacity blocks</a>
-			</div>
+			<details class="calc-methodology">
+				<summary class="methodology-toggle">how is this calculated?</summary>
+				<div class="methodology-body">
+					<p>Throughput estimated from a regression fit to <a href="https://nvidia.github.io/TensorRT-LLM/performance/perf-overview.html" target="_blank" rel="noopener">NVIDIA TRT-LLM v0.21 benchmarks</a> (Llama 8B/70B/405B, FP8, H100 + H200). Predicts output tokens/sec per GPU as a function of model size, input length, and output length. Other precisions scale from the FP8 baseline. L40S scaled from H100 by a fixed ratio (no benchmark data).</p>
+					<p>The efficiency slider scales peak benchmark throughput down to account for production conditions. Benchmarks assume maximum concurrency with no latency constraints. The default is 20%.</p>
+					<p>GPU pricing from <a href="https://aws.amazon.com/ec2/capacityblocks/pricing/" target="_blank" rel="noopener">AWS</a>. H100/H200: capacity block rates. L40S: on-demand. API pricing from <a href="https://llm-prices.com" target="_blank" rel="noopener">llm-prices.com</a>.</p>
+					<p>GPU count sized on required output token throughput at the selected efficiency, rounded up to node pack sizes. Capacity planned on output tokens (the decode bottleneck), not total tokens.</p>
+					<p>Self-hosted cost is GPU compute only. Does not include training, DevOps, networking, storage, or platform fees.</p>
+					<p><a href="https://github.com/adaptive-ml/dev-site/blob/main/src/lib/cost-engine.ts" target="_blank" rel="noopener">see the source code</a></p>
+				</div>
+			</details>
 			<div class="nav-row">
 				<button class="nav-btn" onclick={prevStep}>← back</button>
 				<button class="nav-btn" onclick={nextStep}>next →</button>
@@ -780,7 +804,7 @@
 		{:else if step === 'report' && results && apiModel}
 			{@const savingsPositive = results.annualSavings > 0}
 			{@const savingsPct = results.monthlyApiCost > 0 ? Math.round(Math.abs(results.annualSavings) / (results.monthlyApiCost * 12) * 100) : 0}
-			{@const activeSizeInfo = ALL_SIZES.find((m) => m.id === selectedModelSize) ?? MODEL_SIZES[1]}
+			{@const specialistInfo = specialist}
 			{@const precInfo = PRECISION_OPTIONS.find(p => p.id === precision) ?? PRECISION_OPTIONS[0]}
 
 			<div class="report-hero reveal" style="animation-delay: 0ms">
@@ -798,11 +822,11 @@
 					<div class="breakdown-cols">
 						<div class="breakdown-col">
 							<span class="breakdown-col-label">{apiModel.name}</span>
-							<span class="breakdown-col-big">{formatUsd(results.monthlyApiCost)}<span class="cost-per">/mo</span></span>
+							<span class="breakdown-col-big">{formatUsd(results.monthlyApiCost * 12)}<span class="cost-per">/yr</span></span>
 						</div>
 						<div class="breakdown-col">
-							<span class="breakdown-col-label">{activeSizeInfo.name} specialist</span>
-							<span class="breakdown-col-big">{formatUsd(results.monthlySelfHostedCost)}<span class="cost-per">/mo</span></span>
+							<span class="breakdown-col-label">{specialistInfo?.name ?? 'specialist'} specialist</span>
+							<span class="breakdown-col-big">{formatUsd(results.monthlySelfHostedCost * 12)}<span class="cost-per">/yr</span></span>
 						</div>
 					</div>
 				</div>
@@ -813,17 +837,17 @@
 						<span class="breakdown-label">generalist model</span>
 						<span class="breakdown-value">{apiModel.name} <span class="breakdown-detail">${apiModel.inputPer1M}/${apiModel.outputPer1M} per 1M</span></span>
 					</button>
-					<button class="breakdown-row" onclick={() => pushParams({ step: 'size' })}>
+					<button class="breakdown-row" onclick={() => pushParams({ step: 'specialist' })}>
 						<span class="breakdown-label">specialist</span>
-						<span class="breakdown-value">{activeSizeInfo.name} <span class="breakdown-detail">{activeSizeInfo.suited}</span></span>
+						<span class="breakdown-value">{specialistInfo?.name ?? 'specialist'} <span class="breakdown-detail">{specialistInfo?.suited ?? ''}</span></span>
 					</button>
 					<button class="breakdown-row" onclick={() => pushParams({ step: 'workload' })}>
 						<span class="breakdown-label">volume</span>
-						<span class="breakdown-value">{formatNum(monthlyTokens)} tokens/mo <span class="breakdown-detail">{hasCallsMode ? `${formatNum(callsPerMonth)} calls × ${formatNum(tokensPerCall)} tok` : ''} · {inputRatio}:{100 - inputRatio} in:out</span></span>
+						<span class="breakdown-value">{formatNum(monthlyTokens * 12)} tokens/yr <span class="breakdown-detail">{hasCallsMode ? `${formatNum(callsPerMonth)}/mo × ${formatNum(tokensPerCall)} tok` : ''} · {inputRatio}:{100 - inputRatio} in:out</span></span>
 					</button>
 					<button class="breakdown-row" onclick={() => pushParams({ step: 'gpu' })}>
 						<span class="breakdown-label">infrastructure</span>
-						<span class="breakdown-value">{results.gpusUsed}× {selectedGpu.name} <span class="breakdown-detail">{precInfo.name} · ${selectedGpu.costPerHour}/hr each</span></span>
+						<span class="breakdown-value">{results.gpusUsed}× {selectedGpu.name} <span class="breakdown-detail">{precInfo.name} · {efficiency}% efficiency · ${selectedGpu.costPerHour}/hr each</span></span>
 					</button>
 				</div>
 			</div>
@@ -925,6 +949,24 @@
 		gap: 12px;
 		margin: 0 auto;
 		overflow: hidden;
+	}
+
+	.calc-header {
+		text-align: center;
+		padding: 16px 24px 12px;
+		border-bottom: 1px solid var(--rule);
+	}
+	.calc-title {
+		font-family: var(--font-mono);
+		font-size: 16px;
+		font-weight: 700;
+		color: var(--text);
+		margin: 0;
+	}
+	.calc-desc {
+		font-size: 13px;
+		color: var(--text-dim);
+		margin: 4px 0 0;
 	}
 
 	/* === Platform (never scrolls) === */
@@ -1119,13 +1161,6 @@
 		color: var(--text);
 	}
 
-	.step-subtitle {
-		font-family: var(--font-body);
-		font-size: 13px;
-		color: var(--text-dim);
-		margin: -12px 0 0;
-		line-height: 1.5;
-	}
 
 	/* === Model grid === */
 	.model-grid {
@@ -1183,6 +1218,7 @@
 	}
 
 	.size-card {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
@@ -1194,7 +1230,6 @@
 		text-align: left;
 		transition: border-color 150ms ease, border-radius 200ms ease;
 	}
-
 	.size-card:hover { border-color: var(--text); border-radius: 18px; }
 	.size-card.selected { border-color: var(--text); }
 
@@ -1211,29 +1246,84 @@
 		margin-left: 0.4em;
 	}
 
-	.sc-suited {
+	.tps-estimate {
 		font-family: var(--font-mono);
 		font-size: 11px;
-		color: var(--text-dim);
+		color: var(--text-faint);
 	}
 
-	.custom-inline-input {
-		background: transparent;
+	/* === Specialist combobox === */
+	.combo { position: relative; }
+	.combo-trigger {
+		display: flex;
+		align-items: center;
+		width: 100%;
+		padding: 10px 12px;
+		background: rgba(10, 10, 12, 0.8);
+		border: 1px solid var(--rule);
+		border-radius: 6px;
+		color: var(--text-body);
+		font-family: var(--font-body);
+		font-size: 13px;
+		cursor: pointer;
+		text-align: left;
+		transition: border-color 150ms ease, border-radius 200ms ease;
+	}
+	.combo-trigger:hover { border-color: var(--text-muted); }
+	.combo.open .combo-trigger { border-color: var(--text-muted); border-radius: 6px 6px 0 0; }
+	.combo-selected { font-weight: 500; color: var(--text); }
+	.combo-selected-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-left: 8px; }
+	.combo-placeholder { color: var(--text-faint); }
+	.combo-caret { margin-left: auto; color: var(--text-faint); font-size: 11px; }
+	.combo-dropdown {
+		border: 1px solid var(--rule);
+		border-top: none;
+		border-radius: 0 0 6px 6px;
+		overflow: hidden;
+	}
+	.combo-search {
+		width: 100%;
+		padding: 8px 12px;
+		background: rgba(10, 10, 12, 0.6);
 		border: none;
-		border-bottom: 1px solid var(--text-muted);
-		color: var(--text);
-		font-family: inherit;
-		font-size: inherit;
-		font-weight: inherit;
-		width: 5ch;
+		border-bottom: 1px solid var(--rule);
+		color: var(--text-body);
+		font-family: var(--font-body);
+		font-size: 12px;
 		outline: none;
-		padding: 0 1px;
 	}
-
-	.custom-inline-input:focus {
-		border-bottom-color: var(--text);
+	.combo-search::placeholder { color: var(--text-faint); }
+	.combo-list { max-height: 240px; overflow-y: auto; }
+	.combo-divider { height: 1px; background: var(--rule); margin: 4px 12px; }
+	.combo-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		width: 100%;
+		padding: 8px 12px;
+		background: none;
+		border: none;
+		color: var(--text-body);
+		font-family: var(--font-body);
+		font-size: 13px;
+		cursor: pointer;
+		text-align: left;
+		transition: background 100ms ease;
 	}
-
+	.combo-item:hover { background: rgba(255, 255, 255, 0.05); }
+	.combo-item.selected { color: var(--text); }
+	.combo-star { color: var(--text-muted); font-size: 10px; }
+	.combo-item-right { display: flex; align-items: center; gap: 8px; }
+	.combo-item-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+	.combo-item-suited { font-size: 11px; color: var(--text-faint); }
+	.combo-item-hf {
+		font-family: var(--font-mono);
+		font-size: 10px;
+		color: var(--text-faint);
+		text-decoration: none;
+		transition: color 150ms ease;
+	}
+	.combo-item-hf:hover { color: var(--text-muted); }
 
 	/* === Workload step === */
 	.workload-group {
@@ -1296,25 +1386,27 @@
 		width: 100%;
 	}
 
-	.task-hints {
+	.task-selector {
 		display: flex;
-		gap: 12px;
-		justify-content: center;
+		gap: 8px;
 	}
-
-	.task-hint {
+	.task-btn {
+		flex: 1;
+		padding: 6px 8px;
+		background: none;
+		border: 1px solid var(--rule);
+		border-radius: 4px;
+		cursor: pointer;
+		transition: border-color 150ms ease, border-radius 200ms ease;
+	}
+	.task-btn:hover { border-color: var(--text-muted); border-radius: 14px; }
+	.task-btn.active { border-color: var(--text-muted); }
+	.task-btn-label {
 		font-family: var(--font-mono);
 		font-size: 11px;
 		color: var(--text-muted);
-		background: none;
-		border: none;
-		padding: 0;
-		cursor: pointer;
-		transition: color 150ms ease;
 	}
-
-	.task-hint:hover { color: var(--text-body); }
-	.task-hint.active { color: var(--text-body); }
+	.task-btn.active .task-btn-label { color: var(--text-body); }
 
 	.workload-total {
 		display: flex;
@@ -1368,7 +1460,6 @@
 		text-decoration-color: var(--text-muted);
 	}
 
-	/* === Custom input === */
 	.slider {
 		flex: 1;
 		-webkit-appearance: none;
@@ -1824,21 +1915,35 @@
 		color: var(--text);
 	}
 
-	.inline-sources {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
+	.calc-methodology {
+		margin-top: 8px;
 	}
-
-	.inline-source {
+	.methodology-toggle {
 		font-family: var(--font-mono);
 		font-size: 11px;
 		color: var(--text-faint);
-		text-decoration: none;
+		cursor: pointer;
 		transition: color 150ms ease;
 	}
-
-	.inline-source:hover { color: var(--text-muted); }
+	.methodology-toggle:hover { color: var(--text-muted); }
+	.methodology-body {
+		margin-top: 8px;
+		padding: 12px;
+		background: rgba(10, 10, 12, 0.8);
+		border-radius: 8px;
+		font-size: 12px;
+		line-height: 1.6;
+		color: var(--text-dim);
+	}
+	.methodology-body p { margin: 0 0 8px; }
+	.methodology-body p:last-child { margin: 0; }
+	.methodology-body a {
+		color: var(--text-muted);
+		text-decoration: underline;
+		text-decoration-thickness: 0.12em;
+		text-underline-offset: 0.2em;
+	}
+	.methodology-body a:hover { color: var(--text-body); }
 
 	@media (max-width: 768px) {
 		.gen-shape { width: 96px; height: 96px; }

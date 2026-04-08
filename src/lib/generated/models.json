@@ -1,0 +1,186 @@
+[
+	{
+		"name": "Qwen3 0.6B",
+		"vendor": "qwen",
+		"activeParamsB": 0.8,
+		"totalParamsB": 0.8,
+		"isMoE": false,
+		"url": "https://huggingface.co/Qwen/Qwen3-0.6B",
+		"suited": "edge, on-device"
+	},
+	{
+		"name": "Qwen3 1.7B",
+		"vendor": "qwen",
+		"activeParamsB": 2,
+		"totalParamsB": 2,
+		"isMoE": false,
+		"url": "https://huggingface.co/Qwen/Qwen3-1.7B",
+		"suited": "edge, lightweight"
+	},
+	{
+		"name": "Qwen3 4B",
+		"vendor": "qwen",
+		"activeParamsB": 4.1,
+		"totalParamsB": 4.1,
+		"isMoE": false,
+		"url": "https://huggingface.co/Qwen/Qwen3-4B",
+		"suited": "classification, extraction"
+	},
+	{
+		"name": "Qwen3 8B",
+		"vendor": "qwen",
+		"activeParamsB": 8.2,
+		"totalParamsB": 8.2,
+		"isMoE": false,
+		"url": "https://huggingface.co/Qwen/Qwen3-8B",
+		"suited": "chat, summarization"
+	},
+	{
+		"name": "Qwen3 14B",
+		"vendor": "qwen",
+		"activeParamsB": 14.8,
+		"totalParamsB": 14.8,
+		"isMoE": false,
+		"url": "https://huggingface.co/Qwen/Qwen3-14B",
+		"primary": true,
+		"suited": "coding, reasoning"
+	},
+	{
+		"name": "Qwen3 32B",
+		"vendor": "qwen",
+		"activeParamsB": 30.5,
+		"totalParamsB": 30.5,
+		"isMoE": false,
+		"url": "https://huggingface.co/Qwen/Qwen3-32B",
+		"suited": "agents, complex tasks"
+	},
+	{
+		"name": "Qwen3 30B A3B",
+		"vendor": "qwen",
+		"activeParamsB": 2.9,
+		"totalParamsB": 30.1,
+		"isMoE": true,
+		"url": "https://huggingface.co/Qwen/Qwen3-30B-A3B",
+		"suited": "lightweight MoE"
+	},
+	{
+		"name": "Qwen3 235B A22B",
+		"vendor": "qwen",
+		"activeParamsB": 18.8,
+		"totalParamsB": 235.1,
+		"isMoE": true,
+		"url": "https://huggingface.co/Qwen/Qwen3-235B-A22B",
+		"suited": "coding, reasoning"
+	},
+	{
+		"name": "Qwen3.5 35B A3B",
+		"vendor": "qwen",
+		"activeParamsB": 3,
+		"totalParamsB": 36,
+		"isMoE": true,
+		"url": "https://huggingface.co/Qwen/Qwen3.5-35B-A3B",
+		"suited": "lightweight MoE"
+	},
+	{
+		"name": "Qwen3.5 397B A17B",
+		"vendor": "qwen",
+		"activeParamsB": 17,
+		"totalParamsB": 403.4,
+		"isMoE": true,
+		"url": "https://huggingface.co/Qwen/Qwen3.5-397B-A17B",
+		"suited": "general-purpose, agents"
+	},
+	{
+		"name": "Llama 3.1 8B",
+		"vendor": "meta",
+		"activeParamsB": 8,
+		"totalParamsB": 8,
+		"isMoE": false,
+		"url": "https://huggingface.co/meta-llama/Llama-3.1-8B",
+		"primary": true,
+		"suited": "chat, extraction"
+	},
+	{
+		"name": "Llama 3.3 70B",
+		"vendor": "meta",
+		"activeParamsB": 70.6,
+		"totalParamsB": 70.6,
+		"isMoE": false,
+		"url": "https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct",
+		"primary": true,
+		"suited": "frontier reasoning"
+	},
+	{
+		"name": "Llama 4 Scout",
+		"vendor": "meta",
+		"activeParamsB": 17,
+		"totalParamsB": 109,
+		"isMoE": true,
+		"url": "https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E",
+		"suited": "general-purpose, agents"
+	},
+	{
+		"name": "Llama 4 Maverick",
+		"vendor": "meta",
+		"activeParamsB": 17,
+		"totalParamsB": 401.6,
+		"isMoE": true,
+		"url": "https://huggingface.co/meta-llama/Llama-4-Maverick-17B-128E",
+		"suited": "frontier MoE"
+	},
+	{
+		"name": "Gemma 3 4B",
+		"vendor": "google",
+		"activeParamsB": 4,
+		"totalParamsB": 4,
+		"isMoE": false,
+		"url": "https://huggingface.co/google/gemma-3-4b-it",
+		"suited": "classification, extraction"
+	},
+	{
+		"name": "Gemma 3 12B",
+		"vendor": "google",
+		"activeParamsB": 12,
+		"totalParamsB": 12,
+		"isMoE": false,
+		"url": "https://huggingface.co/google/gemma-3-12b-it",
+		"suited": "summarization, coding"
+	},
+	{
+		"name": "Gemma 3 27B",
+		"vendor": "google",
+		"activeParamsB": 27.4,
+		"totalParamsB": 27.4,
+		"isMoE": false,
+		"url": "https://huggingface.co/google/gemma-3-27b-it",
+		"primary": true,
+		"suited": "agents, complex tasks"
+	},
+	{
+		"name": "Mistral Small 3.1 24B",
+		"vendor": "mistral",
+		"activeParamsB": 24,
+		"totalParamsB": 24,
+		"isMoE": false,
+		"url": "https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+		"suited": "coding, multilingual"
+	},
+	{
+		"name": "DeepSeek V3",
+		"vendor": "deepseek",
+		"activeParamsB": 37,
+		"totalParamsB": 684.5,
+		"isMoE": true,
+		"url": "https://huggingface.co/deepseek-ai/DeepSeek-V3",
+		"suited": "frontier reasoning"
+	},
+	{
+		"name": "DeepSeek R1",
+		"vendor": "deepseek",
+		"activeParamsB": 37,
+		"totalParamsB": 684.5,
+		"isMoE": true,
+		"url": "https://huggingface.co/deepseek-ai/DeepSeek-R1",
+		"suited": "deep reasoning"
+	}
+]
