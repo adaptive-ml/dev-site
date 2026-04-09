@@ -1,36 +1,21 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import symbolSvg from '$logos/symbol/symbol-white.svg?raw';
-	import { calculate, PRIMARY_MODELS, ALL_MODELS, GPU_OPTIONS, PRECISION_OPTIONS, MODEL_DATABASE, type ApiModel, type GpuSpec, type Precision, type ModelEntry } from '$lib/cost-engine';
-	import Fuse from 'fuse.js';
+	import { calculate, formatUsd, PRIMARY_MODELS, ALL_MODELS, GPU_OPTIONS, PRECISION_OPTIONS, MODEL_DATABASE, type ApiModel, type GpuSpec, type Precision, type ModelEntry } from '$lib/cost-engine';
+	import CalcPlatform from './CalcPlatform.svelte';
+	import CalcSpecialistPicker from './CalcSpecialistPicker.svelte';
 
 	let innerWidth = $state(browser ? window.innerWidth : 1024);
 	const isMobile = $derived(innerWidth <= 768);
 
 	function autoFocus(node: HTMLInputElement) { node.focus(); node.select(); }
-	function clickOutside(node: HTMLElement, callback: () => void) {
-		function handle(e: MouseEvent) { if (!node.contains(e.target as Node)) callback(); }
-		document.addEventListener('click', handle, true);
-		return { destroy() { document.removeEventListener('click', handle, true); } };
-	}
 
 	// UI-only state
 	let showOther = $state(false);
 	let hoveredModelId = $state('');
 	let hoveredParamsB = $state<number | null>(null);
-	let modelQuery = $state('');
-	let comboOpen = $state(false);
-	let comboInputEl = $state<HTMLInputElement>();
-	const modelFuse = new Fuse(MODEL_DATABASE, { keys: ['name', 'vendor'], threshold: 0.4, distance: 100 });
-	const filteredModels = $derived(modelQuery.length >= 2
-		? modelFuse.search(modelQuery).map(r => r.item)
-		: [...MODEL_DATABASE.filter(m => m.primary), ...MODEL_DATABASE.filter(m => !m.primary)]
-	);
-	let comboTriggerEl = $state<HTMLElement>();
-	let comboFlip = $state(false);
 	let editingGpuCount = $state(false);
 	let gpuCountInputVal = $state('');
 	let hoveredPrecision = $state<Precision | null>(null);
@@ -38,7 +23,7 @@
 	let activeHelp = $state<string | null>(null);
 
 	function toggleHelp(id: string) { activeHelp = activeHelp === id ? null : id; }
-	let triggerSpin: (() => void) | null = null;
+	let platformRef = $state<CalcPlatform>();
 
 	// URL-synced state (safe for SSR: defaults when not in browser)
 	const params = $derived(browser ? $page.url.searchParams : new URLSearchParams());
@@ -51,7 +36,7 @@
 	const specialist = $derived(MODEL_DATABASE.find(m => m.name === specialistName) ?? null);
 	const stepParam = $derived(params.get('step') ?? '');
 
-	const STEPS = ['model', 'specialist', 'workload', 'gpu', 'report'] as const;
+	const STEPS = ['start', 'model', 'specialist', 'workload', 'gpu', 'report'] as const;
 	type Step = typeof STEPS[number];
 
 	const step = $derived<Step>(
@@ -60,8 +45,11 @@
 		: stepParam === 'workload' || stepParam === 'tokens' || stepParam === 'ratio' || stepParam === 'done' ? 'workload'
 		: stepParam === 'precision' ? (specialist ? 'gpu' : 'model')
 		: stepParam === 'specialist' || stepParam === 'size' ? (selectedApiModelId ? 'specialist' : 'model')
-		: 'model'
+		: stepParam === 'model' ? 'model'
+		: 'start'
 	);
+
+	const hasState = $derived(!!selectedApiModelId);
 
 	// Stamp defaults into URL when arriving at a step
 	$effect(() => {
@@ -70,8 +58,8 @@
 		if (step === 'gpu' && !params.get('prec')) replaceParams({ prec: 'fp8' });
 	});
 
-	// A step is reachable if its param exists in the URL
 	const stepReachable = $derived.by(() => ({
+		start: true,
 		model: true,
 		specialist: !!selectedApiModelId,
 		workload: !!specialistName,
@@ -154,7 +142,7 @@
 	let tpcSlider = $state(tpcToSlider(4000));
 	$effect(() => { if (tokensPerCall > 0) tpcSlider = tpcToSlider(tokensPerCall); });
 	let showMoreGpuOptions = $state(false);
-	$effect(() => { step; showOther = false; showMoreGpuOptions = false; modelQuery = ''; comboOpen = false; });
+	$effect(() => { step; showOther = false; showMoreGpuOptions = false; });
 
 	// Vendor logo SVG paths (monochrome, fill-based)
 	const VENDOR_LOGOS: Record<string, { viewBox: string; d: string }> = {
@@ -201,123 +189,10 @@
 		goto(url.toString(), { replaceState: true, noScroll: true, keepFocus: true });
 	}
 
-	// === Shape generation ===
-
-	// Generalist: sharp static hexagon (flat-bottom: rotate 30deg so edge sits on ground)
-	const HEX_ROT = Math.PI / 6; // 30 degrees
-	function sharpHexPath(r: number, cx: number, cy: number): string {
-		const pts: string[] = [];
-		for (let i = 0; i < 6; i++) {
-			const angle = (Math.PI / 3) * i - Math.PI / 2 + HEX_ROT;
-			pts.push(`${(cx + r * Math.cos(angle)).toFixed(1)} ${(cy + r * Math.sin(angle)).toFixed(1)}`);
-		}
-		return `M ${pts.join(' L ')} Z`;
-	}
-
-	// Specialist: morph between rounded hex (t=0) and circle (t=1)
-	// Uses proper cubic bezier circle approximation (kappa = 0.5522847498)
-	// At t=0: control points sit on hex edges (straight). At t=1: control points
-	// pull outward to form a perfect circle via the standard 4-point-per-arc method.
-	const KAPPA = 0.5522847498;
-	function morphPath(t: number, r: number, cx: number, cy: number): string {
-		const segments: string[] = [];
-		for (let i = 0; i < 6; i++) {
-			const a1 = (Math.PI / 3) * i - Math.PI / 2;
-			const a2 = (Math.PI / 3) * ((i + 1) % 6) - Math.PI / 2;
-			const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
-			const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
-			// For a circle, each 60° arc needs control points at distance kappa*r
-			// along the tangent at each endpoint
-			const tan1x = -Math.sin(a1), tan1y = Math.cos(a1);
-			const tan2x = Math.sin(a2), tan2y = -Math.cos(a2);
-			// Arc length factor for 60° segment
-			const k = KAPPA * r * (2 * Math.sin(Math.PI / 6));
-			// Interpolate: t=0 -> control points on the straight edge, t=1 -> circle arc
-			const straightCx1 = (x1 * 2 + x2) / 3;
-			const straightCy1 = (y1 * 2 + y2) / 3;
-			const straightCx2 = (x1 + x2 * 2) / 3;
-			const straightCy2 = (y1 + y2 * 2) / 3;
-			const circleCx1 = x1 + tan1x * k;
-			const circleCy1 = y1 + tan1y * k;
-			const circleCx2 = x2 + tan2x * k;
-			const circleCy2 = y2 + tan2y * k;
-			const c1x = straightCx1 + (circleCx1 - straightCx1) * t;
-			const c1y = straightCy1 + (circleCy1 - straightCy1) * t;
-			const c2x = straightCx2 + (circleCx2 - straightCx2) * t;
-			const c2y = straightCy2 + (circleCy2 - straightCy2) * t;
-			if (i === 0) segments.push(`M ${x1.toFixed(1)} ${y1.toFixed(1)}`);
-			segments.push(`C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`);
-		}
-		segments.push('Z');
-		return segments.join(' ');
-	}
-
-	const GEN_R = 40;
-	const SPEC_R = 24;
-	// Generalist: flat bottom sits on ground
-	const GEN_CY = 100 - GEN_R;
-	// Specialist: center matches generalist center in viewBox
-	const SPEC_CX = 50;
-	const SPEC_CY = 60;
-	const generalistPath = $derived(sharpHexPath(GEN_R, 50, GEN_CY));
-
-	// Continuous sinusoidal morph + spin for the specialist
-	let specRotation = $state(0);
-	let specPathLive = $state(morphPath(0, SPEC_R, SPEC_CX, SPEC_CY));
-
-	onMount(() => {
-		let frame: number;
-		const start = performance.now();
-		let lastSpinTime = 0;
-		let spinning = false;
-		let spinStart = 0;
-		let spinDuration = 0.8;
-		let spinFrom = 0;
-		let spinTo = 0;
-		let pendingSpin = false;
-
-		triggerSpin = () => { pendingSpin = true; };
-
-		function tick() {
-			const elapsed = (performance.now() - start) / 1000;
-
-			// Oscillate between rounded hex (0.5) and circle (1.0)
-			const morphT = 0.75 + 0.25 * Math.sin(elapsed * Math.PI / 3);
-			specPathLive = morphPath(morphT, SPEC_R, SPEC_CX, SPEC_CY);
-
-			// Spin: triggered externally or roughly every 5-8 seconds
-			if (!spinning && (pendingSpin || elapsed - lastSpinTime > 5 + Math.random() * 3)) {
-				spinning = true;
-				pendingSpin = false;
-				spinStart = elapsed;
-				spinFrom = specRotation;
-				spinTo = spinFrom + (Math.random() > 0.5 ? 360 : -360);
-				spinDuration = 0.6 + Math.random() * 0.4;
-			}
-
-			if (spinning) {
-				const p = Math.min(1, (elapsed - spinStart) / spinDuration);
-				// Ease out cubic
-				const ease = 1 - Math.pow(1 - p, 3);
-				specRotation = spinFrom + (spinTo - spinFrom) * ease;
-				if (p >= 1) {
-					spinning = false;
-					lastSpinTime = elapsed;
-					specRotation = spinTo % 360;
-				}
-			}
-
-			frame = requestAnimationFrame(tick);
-		}
-		frame = requestAnimationFrame(tick);
-		return () => { cancelAnimationFrame(frame); triggerSpin = null; };
-	});
-
 	const genActive = $derived(!!hoveredModelId || !!selectedApiModelId);
 	const specActive = $derived(!!hoveredParamsB || ((step === 'specialist' || step === 'workload' || step === 'gpu' || step === 'report') && !!specialistName));
 
-	// Scale shapes by cost/size. Log scale for perceptual linearity.
-	// Generalist: blended $/1M → scale 0.7–1.2
+	// Scale shapes by cost/size
 	const genScale = $derived.by(() => {
 		if (!apiModel) return 1;
 		const blended = (apiModel.inputPer1M + apiModel.outputPer1M) / 2;
@@ -325,7 +200,6 @@
 		const t = Math.log(Math.max(blended, minCost) / minCost) / Math.log(maxCost / minCost);
 		return 0.7 + Math.min(t, 1) * 0.5;
 	});
-	// Specialist: paramsB → scale 1.0–1.5
 	const specScale = $derived.by(() => {
 		const minP = 4, maxP = 405;
 		const t = Math.log(Math.max(activeParamsB, minP) / minP) / Math.log(maxP / minP);
@@ -340,14 +214,6 @@
 			: null
 	);
 
-	function formatUsd(n: number): string {
-		if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-		if (n >= 100) return `$${Math.round(n).toLocaleString()}`;
-		if (n >= 0.01) return `$${n.toFixed(2)}`;
-		if (n >= 0.001) return `$${n.toFixed(4)}`;
-		return `$${n.toFixed(6)}`;
-	}
-
 	function formatNum(n: number): string {
 		if (n >= 1e12) return `${(n / 1e12).toFixed(1)}T`;
 		if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
@@ -361,9 +227,7 @@
 	}
 
 	function selectSpecialist(m: ModelEntry) {
-		modelQuery = '';
-		comboOpen = false;
-		triggerSpin?.();
+		platformRef?.triggerSpin();
 		replaceParams({ specialist: m.name });
 	}
 
@@ -412,512 +276,452 @@
 <svelte:window bind:innerWidth />
 
 <div class="calc" bind:this={calcEl}>
-	<div class="calc-header">
-		<h1 class="calc-title">GPU cost calculator</h1>
-		<p class="calc-desc">compare the cost of a generalist model to a self-hosted specialist at scale</p>
-	</div>
-
-	<!-- Stepper -->
-	<div class="stepper">
-		{#each STEPS as s, i}
-			{@const isCurrent = s === step}
-			{@const isReachable = stepReachable[s]}
-			{@const isPast = isReachable && STEPS.indexOf(step) > i}
-			<button
-				class="step-dot"
-				class:current={isCurrent}
-				class:reachable={isReachable && !isCurrent}
-				disabled={!isReachable || isCurrent}
-				onclick={() => pushParams({ step: s })}
-			><span class="step-tip">{s}</span></button>
-			{#if i < STEPS.length - 1}
-				<div class="step-line" class:filled={isPast}></div>
-			{/if}
-		{/each}
-	</div>
-
-	<!-- Platform -->
-	<div class="platform">
-		<div class="labels-row">
-			<span class="shape-label" class:dim={!genActive}>Generalist</span>
-			<span class="shape-label" class:dim={!specActive}>Specialist</span>
+	{#if step === 'start'}
+		<div class="start-page">
+			<h1 class="start-title">GPU cost calculator</h1>
+			<p class="start-desc">Compare the cost of an API model to a self-hosted specialist. Pick your models, configure a workload, and see what self-hosting would cost on real GPU pricing.</p>
+			<button class="start-btn" onclick={nextStep}>{hasState ? 'continue' : 'start'}</button>
 		</div>
-
-		<div class="costs-row">
-			<span class="cost-val" class:has-data={genActive && !!results} class:hidden={!genActive}>
-				{genActive && results ? formatUsd(results.monthlyApiCost * 12) : '$0.00'}<span class="cost-per">/yr</span>
-			</span>
-			<span class="cost-val" class:has-data={specActive && !!results} class:hidden={!specActive}>
-				{specActive && results ? formatUsd(results.monthlySelfHostedCost * 12) : '$0.00'}<span class="cost-per">/yr</span>
-			</span>
-		</div>
-
-		<div class="ground">
-			<div class="shapes-row">
-				<button class="shape-area" onclick={(e) => { const el = e.currentTarget?.querySelector('.gen-shape'); el?.classList.remove('tap'); requestAnimationFrame(() => el?.classList.add('tap')); }} aria-label="Generalist model">
-					<svg viewBox="0 0 100 100" class="shape gen-shape" class:dim={!genActive} style="--gen-scale: {genActive ? genScale : 1}; transform: scale({genActive ? genScale : 1})" onanimationend={(e) => e.currentTarget.classList.remove('tap')}>
-						<path d={generalistPath} fill="none" stroke-width="1" />
-						{#if genActive && activeLogo}
-							<svg x="35" y="45" width="30" height="30" viewBox={activeLogo.viewBox} class="vendor-logo">
-								<path d={activeLogo.d} fill="currentColor" />
-							</svg>
-						{/if}
-					</svg>
-				</button>
-
-				<button class="shape-area spec-area" aria-label="Specialist model" onclick={() => { triggerSpin?.(); }}>
-					<div class="spec-mover">
-						<svg viewBox="0 0 100 100" class="shape spec-shape" class:dim={!specActive} style="transform: scale({specActive ? specScale : 1})">
-							<path d={specPathLive} fill="none" stroke-width="1.4" transform="rotate({specRotation} {SPEC_CX} {SPEC_CY})" />
-							{#if specActive}
-								<text x={SPEC_CX} y={SPEC_CY + 1} text-anchor="middle" dominant-baseline="central" class="size-label">{activeParamsB}B</text>
-							{/if}
-						</svg>
-					</div>
-				</button>
-			</div>
-			<div class="ground-line"></div>
-		</div>
-
-		{#if step === 'report'}
-			<div class="savings-row collapsed"></div>
-		{:else}
-			<div class="savings-row" class:hidden={!specActive}>
-				<span class="savings-label">Savings</span>
-				{#if results && results.annualSavings > 0}
-					<span class="savings-num">{formatUsd(results.annualSavings)}/yr</span>
-				{:else if results}
-					<span class="savings-num neg">−{formatUsd(Math.abs(results.annualSavings))}/yr</span>
-				{:else}
-					<span class="savings-num">$0/yr</span>
+	{:else}
+		<!-- Stepper (skip 'start') -->
+		<div class="stepper">
+			{#each STEPS.filter(s => s !== 'start') as s, i}
+				{@const isCurrent = s === step}
+				{@const isReachable = stepReachable[s]}
+				{@const isPast = isReachable && STEPS.indexOf(step) > STEPS.indexOf(s)}
+				<button
+					class="step-dot"
+					class:current={isCurrent}
+					class:reachable={isReachable && !isCurrent}
+					disabled={!isReachable || isCurrent}
+					onclick={() => pushParams({ step: s })}
+				><span class="step-tip">{s}</span></button>
+				{#if i < STEPS.length - 2}
+					<div class="step-line" class:filled={isPast}></div>
 				{/if}
-			</div>
-		{/if}
-	</div>
+			{/each}
+		</div>
 
-	<!-- Controls -->
-	<div class="controls">
-		{#if step === 'model'}
-			<h2 class="prompt">choose a generalist model <button class="help-btn" onclick={() => toggleHelp('model')}>?</button></h2>
-			{#if activeHelp === 'model'}<span class="help-text">the API model you're paying for today. this calculator compares that cost against self-hosting.</span>{/if}
-			<div class="model-grid">
-				{#each PRIMARY_MODELS as model}
-					{@const logo = VENDOR_LOGOS[model.provider.toLowerCase()]}
-					<button
-						class="model-card"
-						class:selected={selectedApiModelId === model.id}
-						onclick={() => selectModel(model.id)}
-						onmouseenter={() => { hoveredModelId = model.id; }}
-						onmouseleave={() => { hoveredModelId = ''; }}
-					>
-						<span class="mc-name">
-							{#if logo}<svg class="mc-logo" viewBox={logo.viewBox}><path d={logo.d} fill="currentColor" /></svg>{/if}
-							{model.name}
-						</span>
-						<span class="mc-price">${model.inputPer1M} / ${model.outputPer1M} per 1M</span>
-					</button>
-				{/each}
-				{#if showOther}
-					{#each ALL_MODELS.filter(m => !PRIMARY_MODELS.includes(m)) as model}
+		<!-- Platform viz (desktop only) -->
+		<div class="platform-wrapper">
+			<CalcPlatform
+				bind:this={platformRef}
+				{apiModel}
+				{activeParamsB}
+				{specActive}
+				{genActive}
+				{results}
+				{step}
+				{activeLogo}
+				{hoveredModelId}
+				{selectedApiModelId}
+				{genScale}
+				{specScale}
+			/>
+		</div>
+
+		<!-- Mobile context bar (mobile only) -->
+		<div class="mobile-context">
+			{#if apiModel}
+				<span class="mobile-model">{apiModel.name}</span>
+			{/if}
+			{#if apiModel && specialist}
+				<span class="mobile-vs">vs</span>
+			{/if}
+			{#if specialist}
+				<span class="mobile-model">{specialist.name}</span>
+			{/if}
+			{#if results && results.annualSavings !== 0}
+				<span class="mobile-savings" class:neg={results.annualSavings < 0}>
+					{results.annualSavings > 0 ? '' : '−'}{formatUsd(Math.abs(results.annualSavings))}/yr
+				</span>
+			{/if}
+		</div>
+
+		<!-- Controls -->
+		<div class="controls">
+			{#if step === 'model'}
+				<h2 class="prompt">choose a generalist model <button class="help-btn" onclick={() => toggleHelp('model')}>?</button></h2>
+				{#if activeHelp === 'model'}<span class="help-text">the API model you're paying for today. this calculator compares that cost against self-hosting.</span>{/if}
+				<div class="model-grid">
+					{#each PRIMARY_MODELS as model}
 						{@const logo = VENDOR_LOGOS[model.provider.toLowerCase()]}
 						<button
 							class="model-card"
 							class:selected={selectedApiModelId === model.id}
 							onclick={() => selectModel(model.id)}
-							onmouseenter={() => { hoveredModelId = model.id; }}
-							onmouseleave={() => { hoveredModelId = ''; }}
+							onmouseenter={() => { if (!isMobile) hoveredModelId = model.id; }}
+							onmouseleave={() => { if (!isMobile) hoveredModelId = ''; }}
 						>
 							<span class="mc-name">
 								{#if logo}<svg class="mc-logo" viewBox={logo.viewBox}><path d={logo.d} fill="currentColor" /></svg>{/if}
 								{model.name}
 							</span>
-							<span class="mc-price">{model.provider} · ${model.inputPer1M} / ${model.outputPer1M} per 1M</span>
+							<span class="mc-price">${model.inputPer1M} / ${model.outputPer1M} per 1M</span>
 						</button>
 					{/each}
-				{:else}
-					<button class="model-card other-card" onclick={() => { showOther = true; }}>
-						<span class="mc-name">more</span>
-					</button>
-				{/if}
-			</div>
-			<details class="calc-methodology">
-				<summary class="methodology-toggle">how is this calculated?</summary>
-				<div class="methodology-body">
-					<p>API pricing from <a href="https://llm-prices.com" target="_blank" rel="noopener">llm-prices.com</a>. Input and output token prices are weighted by the input:output ratio from the workload step.</p>
-					<p><a href="https://github.com/adaptive-ml/dev-site/blob/main/src/lib/cost-engine.ts" target="_blank" rel="noopener">see the source code</a></p>
-				</div>
-			</details>
-			<div class="nav-row">
-				<span></span>
-				{#if selectedApiModelId}<button class="nav-btn" onclick={nextStep}>next →</button>{/if}
-			</div>
-		{:else if step === 'specialist'}
-			<h2 class="prompt">choose a specialist <button class="help-btn" onclick={() => toggleHelp('specialist')}>?</button></h2>
-			{#if activeHelp === 'specialist'}<span class="help-text">an <a href="/training">open model</a> <a href="/training/post-training/sft">fine-tuned</a> for your task using <a href="/optimization">RL</a>, then self-hosted on your own GPUs instead of calling an API.</span>{/if}
-
-			<div class="combo" class:open={comboOpen} class:flip={comboFlip} use:clickOutside={() => { if (!isMobile) { comboOpen = false; modelQuery = ''; } }}>
-				<button
-					class="combo-trigger"
-					bind:this={comboTriggerEl}
-					onclick={() => {
-						if (!comboOpen && !isMobile && comboTriggerEl) {
-							const rect = comboTriggerEl.getBoundingClientRect();
-							comboFlip = (window.innerHeight - rect.bottom) < 260;
-						}
-						comboOpen = !comboOpen;
-						if (comboOpen && !isMobile) requestAnimationFrame(() => comboInputEl?.focus());
-					}}
-				>
-					{#if specialist}
-						<span class="combo-selected">{specialist.name}</span>
-						<span class="combo-selected-meta">{#if specialist.isMoE}{specialist.activeParamsB}B / {specialist.totalParamsB}B MoE{:else}{specialist.activeParamsB}B{/if}</span>
+					{#if showOther}
+						{#each ALL_MODELS.filter(m => !PRIMARY_MODELS.includes(m)) as model}
+							{@const logo = VENDOR_LOGOS[model.provider.toLowerCase()]}
+							<button
+								class="model-card"
+								class:selected={selectedApiModelId === model.id}
+								onclick={() => selectModel(model.id)}
+								onmouseenter={() => { if (!isMobile) hoveredModelId = model.id; }}
+								onmouseleave={() => { if (!isMobile) hoveredModelId = ''; }}
+							>
+								<span class="mc-name">
+									{#if logo}<svg class="mc-logo" viewBox={logo.viewBox}><path d={logo.d} fill="currentColor" /></svg>{/if}
+									{model.name}
+								</span>
+								<span class="mc-price">{model.provider} · ${model.inputPer1M} / ${model.outputPer1M} per 1M</span>
+							</button>
+						{/each}
 					{:else}
-						<span class="combo-placeholder">select a model</span>
+						<button class="model-card other-card" onclick={() => { showOther = true; }}>
+							<span class="mc-name">more</span>
+						</button>
 					{/if}
-					<span class="combo-caret">{comboOpen ? '▴' : '▾'}</span>
-				</button>
-				{#if comboOpen && !isMobile}
-					<div class="combo-dropdown">
-						<input
-							class="combo-search"
-							type="text"
-							placeholder="search models..."
-							bind:value={modelQuery}
-							bind:this={comboInputEl}
-						/>
-						<div class="combo-list">
-							{#each filteredModels as m}
-								{@const isPrimary = !!m.primary}
-								{@const isFirst = m === filteredModels.find(f => !f.primary)}
-								{#if isFirst && !modelQuery}<div class="combo-divider"></div>{/if}
+				</div>
+				<details class="calc-methodology">
+					<summary class="methodology-toggle">how is this calculated?</summary>
+					<div class="methodology-body">
+						<p>API pricing from <a href="https://llm-prices.com" target="_blank" rel="noopener">llm-prices.com</a>. Input and output token prices are weighted by the input:output ratio from the workload step.</p>
+						<p><a href="https://github.com/adaptive-ml/dev-site/blob/main/src/lib/cost-engine.ts" target="_blank" rel="noopener">see the source code</a></p>
+					</div>
+				</details>
+				<div class="nav-row">
+					<button class="nav-btn" onclick={prevStep}>← back</button>
+					{#if selectedApiModelId}<button class="nav-btn" onclick={nextStep}>next →</button>{/if}
+				</div>
+			{:else if step === 'specialist'}
+				<h2 class="prompt">choose a specialist <button class="help-btn" onclick={() => toggleHelp('specialist')}>?</button></h2>
+				{#if activeHelp === 'specialist'}<span class="help-text">an <a href="/training">open model</a> <a href="/training/post-training/sft">fine-tuned</a> for your task using <a href="/optimization">RL</a>, then self-hosted on your own GPUs instead of calling an API.</span>{/if}
+
+				<CalcSpecialistPicker {specialist} {isMobile} onselect={selectSpecialist} />
+
+				<details class="calc-methodology">
+					<summary class="methodology-toggle">how is this calculated?</summary>
+					<div class="methodology-body">
+						<p>Throughput estimated from active parameters via a regression fit to <a href="https://nvidia.github.io/TensorRT-LLM/performance/perf-overview.html" target="_blank" rel="noopener">TRT-LLM v0.21 benchmarks</a>. For mixture-of-experts models, active parameters drive throughput; total parameters drive memory.</p>
+						<p><a href="https://github.com/adaptive-ml/dev-site/blob/main/src/lib/cost-engine.ts" target="_blank" rel="noopener">see the source code</a></p>
+					</div>
+				</details>
+
+				<div class="nav-row">
+					<button class="nav-btn" onclick={() => { hoveredParamsB = null; prevStep(); }}>← back</button>
+					{#if specialistName}<button class="nav-btn" onclick={() => { hoveredParamsB = null; nextStep(); }}>next →</button>{/if}
+				</div>
+			{:else if step === 'workload'}
+				<h2 class="prompt">configure workload <button class="help-btn" onclick={() => toggleHelp('workload')}>?</button></h2>
+				{#if activeHelp === 'workload'}<span class="help-text">how many requests you'll run and how large each one is. pick a task type to start, then adjust.</span>{/if}
+
+				<div class="task-selector">
+					{#each TASK_PRESETS as preset}
+						<button
+							class="task-btn"
+							class:active={activeTask?.label === preset.label}
+							onclick={() => selectTask(preset)}
+						>
+							<span class="task-btn-label">{preset.label}</span>
+						</button>
+					{/each}
+				</div>
+
+				<div class="workload-group">
+					<div class="workload-row">
+						<span class="workload-label">calls / month</span>
+						{#if editingCalls}
+							<input
+								class="workload-input"
+								type="text"
+								inputmode="numeric"
+								value={callsInputVal}
+								oninput={(e) => { callsInputVal = e.currentTarget.value; }}
+								onblur={commitCallsInput}
+								onkeydown={(e) => { if (e.key === 'Enter') commitCallsInput(); if (e.key === 'Escape') { editingCalls = false; } }}
+								use:autoFocus
+							/>
+						{:else}
+							<button class="workload-value" onclick={() => { editingCalls = true; callsInputVal = formatNum(callsPerMonth || 10000000); }}>
+								{formatNum(callsPerMonth || 10000000)}
+							</button>
+						{/if}
+					</div>
+					<input type="range" min="0" max={CALLS_SNAPS.length - 1} step="1" bind:value={callsSlider} oninput={() => { updateCalls(sliderToCalls(callsSlider)); }} class="slider workload-slider" />
+				</div>
+				<div class="workload-group">
+					<div class="workload-row">
+						<span class="workload-label">tokens / call</span>
+						{#if editingTpc}
+							<input
+								class="workload-input"
+								type="text"
+								inputmode="numeric"
+								value={tpcInputVal}
+								oninput={(e) => { tpcInputVal = e.currentTarget.value; }}
+								onblur={commitTpcInput}
+								onkeydown={(e) => { if (e.key === 'Enter') commitTpcInput(); if (e.key === 'Escape') { editingTpc = false; } }}
+								use:autoFocus
+							/>
+						{:else}
+							<button class="workload-value" onclick={() => { editingTpc = true; tpcInputVal = String(tokensPerCall || 4000); }}>
+								{formatNum(tokensPerCall || 4000)}
+							</button>
+						{/if}
+					</div>
+					<input type="range" min="0" max={TPC_STOPS.length - 1} step="1" bind:value={tpcSlider} oninput={() => { updateTpc(sliderToTpc(tpcSlider)); }} class="slider workload-slider" />
+				</div>
+				<div class="workload-group">
+					<div class="workload-row">
+						<span class="workload-label">input : output</span>
+						<span class="workload-value static">{inputRatio}:{100 - inputRatio}</span>
+					</div>
+					<input type="range" min="10" max="95" step="5" value={inputRatio} oninput={(e) => replaceParams({ ratio: e.currentTarget.value })} class="slider workload-slider" />
+				</div>
+				<div class="workload-total">
+					<span class="workload-total-label">total</span>
+					<span class="workload-total-value">{formatNum(monthlyTokens * 12)}<span class="workload-total-unit"> tokens/yr</span></span>
+				</div>
+				<div class="nav-row">
+					<button class="nav-btn" onclick={prevStep}>← back</button>
+					<button class="nav-btn" onclick={nextStep}>next →</button>
+				</div>
+			{:else if step === 'gpu'}
+				<h2 class="prompt">configure gpu</h2>
+				<div class="workload-row">
+					<span class="workload-label">gpu type <button class="help-btn" onclick={() => toggleHelp('gpu-type')}>?</button></span>
+				</div>
+				{#if activeHelp === 'gpu-type'}<span class="help-text">the GPU that runs your model. faster GPUs cost more per hour but serve more traffic, so fewer may be needed.</span>{/if}
+				<div class="gpu-grid">
+					{#each GPU_OPTIONS as gpu}
+						<button
+							class="gpu-card"
+							class:selected={selectedGpu.id === gpu.id}
+							onclick={() => { replaceParams({ gpu: gpu.id }); }}
+							onmouseenter={() => { if (!isMobile) hoveredGpu = gpu; }}
+							onmouseleave={() => { if (!isMobile) hoveredGpu = null; }}
+						>
+							<span class="gpu-name">{gpu.name}</span>
+							<span class="gpu-meta">{gpu.memoryGb} GB · ${gpu.costPerHour}/hr</span>
+						</button>
+					{/each}
+				</div>
+				{#if results && !results.modelFitsGpu}
+					{@const bytesPerParam = PRECISION_OPTIONS.find(p => p.id === precision)?.bytesPerParam ?? 1}
+					<span class="gpu-warning">{activeSizeLabel} needs {Math.ceil(activeTotalParamsB * bytesPerParam)} GB in {activePrecision.toUpperCase()}. {activeGpu.name} has {activeGpu.memoryGb} GB.</span>
+				{/if}
+
+				{#if showMoreGpuOptions}
+					<div class="workload-group">
+						<div class="workload-row">
+							<span class="workload-label">efficiency <button class="help-btn" onclick={() => toggleHelp('efficiency')}>?</button></span>
+							<span class="workload-value static">{efficiency}%</span>
+						</div>
+						{#if activeHelp === 'efficiency'}<span class="help-text">what fraction of peak speed you'll actually get in production. the gap comes from latency constraints, uneven traffic, and serving overhead.</span>{/if}
+						<input type="range" min="5" max="100" step="5" value={efficiency} oninput={(e) => replaceParams({ eff: e.currentTarget.value })} class="slider workload-slider" />
+						{#if results}
+							<span class="tps-estimate">{Math.round(results.outputThroughput * efficiency / 100)} output tok/s</span>
+						{/if}
+					</div>
+					<div class="workload-group">
+						<div class="workload-row">
+							<span class="workload-label">precision <button class="help-btn" onclick={() => toggleHelp('precision')}>?</button></span>
+						</div>
+						{#if activeHelp === 'precision'}<span class="help-text">how precisely the model's weights are stored. lower precision uses less memory and runs faster. FP8 is standard for most models.</span>{/if}
+						<div class="size-grid">
+							{#each PRECISION_OPTIONS as p}
 								<button
-									class="combo-item"
-									class:selected={specialistName === m.name}
-									onclick={() => selectSpecialist(m)}
-									onmouseenter={() => { hoveredParamsB = m.activeParamsB; }}
-									onmouseleave={() => { hoveredParamsB = null; }}
+									class="size-card"
+									class:selected={precision === p.id}
+									onclick={() => selectPrecision(p.id)}
+									onmouseenter={() => { if (!isMobile) hoveredPrecision = p.id; }}
+									onmouseleave={() => { if (!isMobile) hoveredPrecision = null; }}
 								>
-									<span class="combo-item-name">{#if isPrimary}<span class="combo-star">★</span> {/if}{m.name}</span>
-									<span class="combo-item-right">
-										<span class="combo-item-meta">{#if m.isMoE}{m.activeParamsB}B / {m.totalParamsB}B MoE{:else}{m.activeParamsB}B{/if}</span>
-										{#if m.suited}<span class="combo-item-suited">{m.suited}</span>{/if}
-										<a class="combo-item-hf" href={m.url} target="_blank" rel="noopener" onclick={(e) => e.stopPropagation()}>HF ↗</a>
-									</span>
+									<span class="sc-name">{p.name}{#if p.id === 'fp8'} <span class="sc-label">standard</span>{/if}</span>
 								</button>
 							{/each}
 						</div>
 					</div>
+					<button class="more-toggle" onclick={() => { showMoreGpuOptions = false; }}>▴ less</button>
+				{:else}
+					<button class="more-toggle" onclick={() => { showMoreGpuOptions = true; }}>▾ more</button>
 				{/if}
-			</div>
 
-			{#if comboOpen && isMobile}
-				<div class="sheet-backdrop" onclick={() => { comboOpen = false; modelQuery = ''; }} role="presentation"></div>
-				<div class="sheet">
-					<div class="sheet-handle"></div>
-					<input
-						class="sheet-search"
-						type="text"
-						placeholder="search models..."
-						bind:value={modelQuery}
-						bind:this={comboInputEl}
-						use:autoFocus
-					/>
-					<div class="sheet-list">
-						{#each filteredModels as m}
-							{@const isPrimary = !!m.primary}
-							{@const isFirst = m === filteredModels.find(f => !f.primary)}
-							{#if isFirst && !modelQuery}<div class="combo-divider"></div>{/if}
-							<button
-								class="sheet-item"
-								class:selected={specialistName === m.name}
-								onclick={() => selectSpecialist(m)}
-							>
-								<span class="combo-item-name">{#if isPrimary}<span class="combo-star">★</span> {/if}{m.name}</span>
-								<span class="sheet-item-meta">
-									{#if m.isMoE}{m.activeParamsB}B / {m.totalParamsB}B MoE{:else}{m.activeParamsB}B{/if}
-									{#if m.suited}<span class="combo-item-suited">{m.suited}</span>{/if}
-								</span>
-							</button>
-						{/each}
+				<div class="adv-section">
+					<span class="workload-label">gpu count <button class="help-btn" onclick={() => toggleHelp('gpu-count')}>?</button></span>
+					{#if activeHelp === 'gpu-count'}<span class="help-text">how many GPUs to run your model on. auto-calculated from your workload and efficiency, rounded up to node boundaries (e.g. 8 GPUs per H100 node).</span>{/if}
+					<div class="count-controls">
+						<button class="count-mode" class:selected={gpuCountMode === 'auto'} onclick={() => { replaceParams({ gpus: '' }); }}>auto</button>
+						<button class="count-mode" class:selected={gpuCountMode === 'manual'} onclick={() => { replaceParams({ gpus: String(results?.gpusAuto ?? 1) }); }}>manual</button>
 					</div>
-				</div>
-			{/if}
-
-			<details class="calc-methodology">
-				<summary class="methodology-toggle">how is this calculated?</summary>
-				<div class="methodology-body">
-					<p>Throughput estimated from active parameters via a regression fit to <a href="https://nvidia.github.io/TensorRT-LLM/performance/perf-overview.html" target="_blank" rel="noopener">TRT-LLM v0.21 benchmarks</a>. For mixture-of-experts models, active parameters drive throughput; total parameters drive memory.</p>
-					<p><a href="https://github.com/adaptive-ml/dev-site/blob/main/src/lib/cost-engine.ts" target="_blank" rel="noopener">see the source code</a></p>
-				</div>
-			</details>
-
-			<div class="nav-row">
-				<button class="nav-btn" onclick={() => { hoveredParamsB = null; prevStep(); }}>← back</button>
-				{#if specialistName}<button class="nav-btn" onclick={() => { hoveredParamsB = null; nextStep(); }}>next →</button>{/if}
-			</div>
-		{:else if step === 'workload'}
-			<h2 class="prompt">configure workload <button class="help-btn" onclick={() => toggleHelp('workload')}>?</button></h2>
-			{#if activeHelp === 'workload'}<span class="help-text">how many requests you'll run and how large each one is. pick a task type to start, then adjust.</span>{/if}
-
-			<div class="task-selector">
-				{#each TASK_PRESETS as preset}
-					<button
-						class="task-btn"
-						class:active={activeTask?.label === preset.label}
-						onclick={() => selectTask(preset)}
-					>
-						<span class="task-btn-label">{preset.label}</span>
-					</button>
-				{/each}
-			</div>
-
-			<div class="workload-group">
-				<div class="workload-row">
-					<span class="workload-label">calls / month</span>
-					{#if editingCalls}
-						<input
-							class="workload-input"
-							type="text"
-							inputmode="numeric"
-							value={callsInputVal}
-							oninput={(e) => { callsInputVal = e.currentTarget.value; }}
-							onblur={commitCallsInput}
-							onkeydown={(e) => { if (e.key === 'Enter') commitCallsInput(); if (e.key === 'Escape') { editingCalls = false; } }}
-							use:autoFocus
-						/>
-					{:else}
-						<button class="workload-value" onclick={() => { editingCalls = true; callsInputVal = formatNum(callsPerMonth || 10000000); }}>
-							{formatNum(callsPerMonth || 10000000)}
-						</button>
-					{/if}
-				</div>
-				<input type="range" min="0" max={CALLS_SNAPS.length - 1} step="1" bind:value={callsSlider} oninput={() => { updateCalls(sliderToCalls(callsSlider)); }} class="slider workload-slider" />
-			</div>
-			<div class="workload-group">
-				<div class="workload-row">
-					<span class="workload-label">tokens / call</span>
-					{#if editingTpc}
-						<input
-							class="workload-input"
-							type="text"
-							inputmode="numeric"
-							value={tpcInputVal}
-							oninput={(e) => { tpcInputVal = e.currentTarget.value; }}
-							onblur={commitTpcInput}
-							onkeydown={(e) => { if (e.key === 'Enter') commitTpcInput(); if (e.key === 'Escape') { editingTpc = false; } }}
-							use:autoFocus
-						/>
-					{:else}
-						<button class="workload-value" onclick={() => { editingTpc = true; tpcInputVal = String(tokensPerCall || 4000); }}>
-							{formatNum(tokensPerCall || 4000)}
-						</button>
-					{/if}
-				</div>
-				<input type="range" min="0" max={TPC_STOPS.length - 1} step="1" bind:value={tpcSlider} oninput={() => { updateTpc(sliderToTpc(tpcSlider)); }} class="slider workload-slider" />
-			</div>
-			<div class="workload-group">
-				<div class="workload-row">
-					<span class="workload-label">input : output</span>
-					<span class="workload-value static">{inputRatio}:{100 - inputRatio}</span>
-				</div>
-				<input type="range" min="10" max="95" step="5" value={inputRatio} oninput={(e) => replaceParams({ ratio: e.currentTarget.value })} class="slider workload-slider" />
-			</div>
-			<div class="workload-total">
-				<span class="workload-total-label">total</span>
-				<span class="workload-total-value">{formatNum(monthlyTokens * 12)}<span class="workload-total-unit"> tokens/yr</span></span>
-			</div>
-			<div class="nav-row">
-				<button class="nav-btn" onclick={prevStep}>← back</button>
-				<button class="nav-btn" onclick={nextStep}>next →</button>
-			</div>
-		{:else if step === 'gpu'}
-			<h2 class="prompt">configure gpu</h2>
-			<div class="workload-row">
-				<span class="workload-label">gpu type <button class="help-btn" onclick={() => toggleHelp('gpu-type')}>?</button></span>
-			</div>
-			{#if activeHelp === 'gpu-type'}<span class="help-text">the GPU that runs your model. faster GPUs cost more per hour but serve more traffic, so fewer may be needed.</span>{/if}
-			<div class="gpu-grid">
-				{#each GPU_OPTIONS as gpu}
-					<button
-						class="gpu-card"
-						class:selected={selectedGpu.id === gpu.id}
-						onclick={() => { replaceParams({ gpu: gpu.id }); }}
-						onmouseenter={() => { hoveredGpu = gpu; }}
-						onmouseleave={() => { hoveredGpu = null; }}
-					>
-						<span class="gpu-name">{gpu.name}</span>
-						<span class="gpu-meta">{gpu.memoryGb} GB · ${gpu.costPerHour}/hr</span>
-					</button>
-				{/each}
-			</div>
-			{#if results && !results.modelFitsGpu}
-				{@const bytesPerParam = PRECISION_OPTIONS.find(p => p.id === precision)?.bytesPerParam ?? 1}
-				<span class="gpu-warning">{activeSizeLabel} needs {Math.ceil(activeTotalParamsB * bytesPerParam)} GB in {activePrecision.toUpperCase()}. {activeGpu.name} has {activeGpu.memoryGb} GB.</span>
-			{/if}
-
-			{#if showMoreGpuOptions}
-				<div class="workload-group">
-					<div class="workload-row">
-						<span class="workload-label">efficiency <button class="help-btn" onclick={() => toggleHelp('efficiency')}>?</button></span>
-						<span class="workload-value static">{efficiency}%</span>
-					</div>
-					{#if activeHelp === 'efficiency'}<span class="help-text">what fraction of peak speed you'll actually get in production. the gap comes from latency constraints, uneven traffic, and serving overhead.</span>{/if}
-					<input type="range" min="5" max="100" step="5" value={efficiency} oninput={(e) => replaceParams({ eff: e.currentTarget.value })} class="slider workload-slider" />
-					{#if results}
-						<span class="tps-estimate">{Math.round(results.outputThroughput * efficiency / 100)} output tok/s</span>
-					{/if}
-				</div>
-				<div class="workload-group">
-					<div class="workload-row">
-						<span class="workload-label">precision <button class="help-btn" onclick={() => toggleHelp('precision')}>?</button></span>
-					</div>
-					{#if activeHelp === 'precision'}<span class="help-text">how precisely the model's weights are stored. lower precision uses less memory and runs faster. FP8 is standard for most models.</span>{/if}
-					<div class="size-grid">
-						{#each PRECISION_OPTIONS as p}
-							<button
-								class="size-card"
-								class:selected={precision === p.id}
-								onclick={() => selectPrecision(p.id)}
-								onmouseenter={() => { hoveredPrecision = p.id; }}
-								onmouseleave={() => { hoveredPrecision = null; }}
-							>
-								<span class="sc-name">{p.name}{#if p.id === 'fp8'} <span class="sc-label">standard</span>{/if}</span>
-							</button>
-						{/each}
-					</div>
-				</div>
-				<button class="more-toggle" onclick={() => { showMoreGpuOptions = false; }}>▴ less</button>
-			{:else}
-				<button class="more-toggle" onclick={() => { showMoreGpuOptions = true; }}>▾ more</button>
-			{/if}
-
-			<div class="adv-section">
-				<span class="workload-label">gpu count <button class="help-btn" onclick={() => toggleHelp('gpu-count')}>?</button></span>
-				{#if activeHelp === 'gpu-count'}<span class="help-text">how many GPUs to run your model on. auto-calculated from your workload and efficiency, rounded up to node boundaries (e.g. 8 GPUs per H100 node).</span>{/if}
-				<div class="count-controls">
-					<button class="count-mode" class:selected={gpuCountMode === 'auto'} onclick={() => { replaceParams({ gpus: '' }); }}>auto</button>
-					<button class="count-mode" class:selected={gpuCountMode === 'manual'} onclick={() => { replaceParams({ gpus: String(results?.gpusAuto ?? 1) }); }}>manual</button>
-				</div>
-				<div class="count-value-row">
-					{#if gpuCountMode === 'manual'}
-						<button class="count-btn" onclick={() => { if (gpuCountManual > 1) replaceParams({ gpus: String(gpuCountManual - 1) }); }}>−</button>
-						{#if editingGpuCount}
-							<input
-								class="count-input"
-								type="text"
-								inputmode="numeric"
-								value={gpuCountInputVal}
-								oninput={(e) => { gpuCountInputVal = e.currentTarget.value; }}
-								onblur={() => { const v = parseInt(gpuCountInputVal); if (!isNaN(v)) replaceParams({ gpus: String(Math.min(Math.max(v, 1), 128)) }); editingGpuCount = false; }}
-								onkeydown={(e) => { if (e.key === 'Enter') { const v = parseInt(gpuCountInputVal); if (!isNaN(v)) replaceParams({ gpus: String(Math.min(Math.max(v, 1), 128)) }); editingGpuCount = false; } if (e.key === 'Escape') editingGpuCount = false; }}
-								use:autoFocus
-							/>
-						{:else}
-							<button class="count-value" onclick={() => { editingGpuCount = true; gpuCountInputVal = String(gpuCountManual); }}>{gpuCountManual}</button>
+					<div class="count-value-row">
+						{#if gpuCountMode === 'manual'}
+							<button class="count-btn" onclick={() => { if (gpuCountManual > 1) replaceParams({ gpus: String(gpuCountManual - 1) }); }}>−</button>
+							{#if editingGpuCount}
+								<input
+									class="count-input"
+									type="text"
+									inputmode="numeric"
+									value={gpuCountInputVal}
+									oninput={(e) => { gpuCountInputVal = e.currentTarget.value; }}
+									onblur={() => { const v = parseInt(gpuCountInputVal); if (!isNaN(v)) replaceParams({ gpus: String(Math.min(Math.max(v, 1), 128)) }); editingGpuCount = false; }}
+									onkeydown={(e) => { if (e.key === 'Enter') { const v = parseInt(gpuCountInputVal); if (!isNaN(v)) replaceParams({ gpus: String(Math.min(Math.max(v, 1), 128)) }); editingGpuCount = false; } if (e.key === 'Escape') editingGpuCount = false; }}
+									use:autoFocus
+								/>
+							{:else}
+								<button class="count-value" onclick={() => { editingGpuCount = true; gpuCountInputVal = String(gpuCountManual); }}>{gpuCountManual}</button>
+							{/if}
+							<button class="count-btn" onclick={() => { if (gpuCountManual < 128) replaceParams({ gpus: String(gpuCountManual + 1) }); }}>+</button>
+						{:else if results}
+							<span class="count-value auto">{results.gpusAuto}</span>
 						{/if}
-						<button class="count-btn" onclick={() => { if (gpuCountManual < 128) replaceParams({ gpus: String(gpuCountManual + 1) }); }}>+</button>
-					{:else if results}
-						<span class="count-value auto">{results.gpusAuto}</span>
+					</div>
+					{#if results}
+						{@const utilPct = Math.round(results.utilization * 100)}
+						{@const u = results.utilization}
+					{@const utilColor =
+						u > 0.95 ? '#f13242'
+						: u > 0.80 ? `color-mix(in srgb, #f13242 ${Math.round((u - 0.80) / 0.15 * 100)}%, #ff8c00)`
+						: u > 0.60 ? '#00ac3a'
+						: u > 0.30 ? `color-mix(in srgb, #ff8c00 ${Math.round((1 - (u - 0.30) / 0.30) * 100)}%, #00ac3a)`
+						: u > 0.10 ? '#ff8c00'
+						: '#f13242'}
+						<div class="util-bar">
+							<div class="util-fill" style="width: {Math.min(utilPct, 100)}%; background: {utilColor}"></div>
+						</div>
+						<span class="util-label" style="color: {utilColor}">{utilPct === 0 && results.utilization > 0 ? '<1' : utilPct}% utilization</span>
 					{/if}
 				</div>
-				{#if results}
-					{@const utilPct = Math.round(results.utilization * 100)}
-					{@const u = results.utilization}
-				{@const utilColor =
-					u > 0.95 ? '#f13242'
-					: u > 0.80 ? `color-mix(in srgb, #f13242 ${Math.round((u - 0.80) / 0.15 * 100)}%, #ff8c00)`
-					: u > 0.60 ? '#00ac3a'
-					: u > 0.30 ? `color-mix(in srgb, #ff8c00 ${Math.round((1 - (u - 0.30) / 0.30) * 100)}%, #00ac3a)`
-					: u > 0.10 ? '#ff8c00'
-					: '#f13242'}
-					<div class="util-bar">
-						<div class="util-fill" style="width: {Math.min(utilPct, 100)}%; background: {utilColor}"></div>
+
+				<details class="calc-methodology">
+					<summary class="methodology-toggle">how is this calculated?</summary>
+					<div class="methodology-body">
+						<p>Throughput estimated from a regression fit to <a href="https://nvidia.github.io/TensorRT-LLM/performance/perf-overview.html" target="_blank" rel="noopener">NVIDIA TRT-LLM v0.21 benchmarks</a> (Llama 8B/70B/405B, FP8, H100 + H200). Predicts output tokens/sec per GPU as a function of model size, input length, and output length. Other precisions scale from the FP8 baseline. L40S scaled from H100 by a fixed ratio (no benchmark data).</p>
+						<p>The efficiency slider scales peak benchmark throughput down to account for production conditions. Benchmarks assume maximum concurrency with no latency constraints. The default is 20%.</p>
+						<p>GPU pricing from <a href="https://aws.amazon.com/ec2/capacityblocks/pricing/" target="_blank" rel="noopener">AWS</a>. H100/H200: capacity block rates. L40S: on-demand. API pricing from <a href="https://llm-prices.com" target="_blank" rel="noopener">llm-prices.com</a>.</p>
+						<p>GPU count sized on required output token throughput at the selected efficiency, rounded up to node pack sizes. Capacity planned on output tokens (the decode bottleneck), not total tokens.</p>
+						<p>Self-hosted cost is GPU compute only. Does not include training, DevOps, networking, storage, or platform fees.</p>
+						<p><a href="https://github.com/adaptive-ml/dev-site/blob/main/src/lib/cost-engine.ts" target="_blank" rel="noopener">see the source code</a></p>
 					</div>
-					<span class="util-label" style="color: {utilColor}">{utilPct === 0 && results.utilization > 0 ? '<1' : utilPct}% utilization</span>
-				{/if}
-			</div>
-
-			<details class="calc-methodology">
-				<summary class="methodology-toggle">how is this calculated?</summary>
-				<div class="methodology-body">
-					<p>Throughput estimated from a regression fit to <a href="https://nvidia.github.io/TensorRT-LLM/performance/perf-overview.html" target="_blank" rel="noopener">NVIDIA TRT-LLM v0.21 benchmarks</a> (Llama 8B/70B/405B, FP8, H100 + H200). Predicts output tokens/sec per GPU as a function of model size, input length, and output length. Other precisions scale from the FP8 baseline. L40S scaled from H100 by a fixed ratio (no benchmark data).</p>
-					<p>The efficiency slider scales peak benchmark throughput down to account for production conditions. Benchmarks assume maximum concurrency with no latency constraints. The default is 20%.</p>
-					<p>GPU pricing from <a href="https://aws.amazon.com/ec2/capacityblocks/pricing/" target="_blank" rel="noopener">AWS</a>. H100/H200: capacity block rates. L40S: on-demand. API pricing from <a href="https://llm-prices.com" target="_blank" rel="noopener">llm-prices.com</a>.</p>
-					<p>GPU count sized on required output token throughput at the selected efficiency, rounded up to node pack sizes. Capacity planned on output tokens (the decode bottleneck), not total tokens.</p>
-					<p>Self-hosted cost is GPU compute only. Does not include training, DevOps, networking, storage, or platform fees.</p>
-					<p><a href="https://github.com/adaptive-ml/dev-site/blob/main/src/lib/cost-engine.ts" target="_blank" rel="noopener">see the source code</a></p>
+				</details>
+				<div class="nav-row">
+					<button class="nav-btn" onclick={prevStep}>← back</button>
+					<button class="nav-btn" onclick={nextStep}>next →</button>
 				</div>
-			</details>
-			<div class="nav-row">
-				<button class="nav-btn" onclick={prevStep}>← back</button>
-				<button class="nav-btn" onclick={nextStep}>next →</button>
-			</div>
-		{:else if step === 'report' && results && apiModel}
-			{@const savingsPositive = results.annualSavings > 0}
-			{@const savingsPct = results.monthlyApiCost > 0 ? Math.round(Math.abs(results.annualSavings) / (results.monthlyApiCost * 12) * 100) : 0}
-			{@const specialistInfo = specialist}
-			{@const precInfo = PRECISION_OPTIONS.find(p => p.id === precision) ?? PRECISION_OPTIONS[0]}
+			{:else if step === 'report' && results && apiModel}
+				{@const savingsPositive = results.annualSavings > 0}
+				{@const savingsPct = results.monthlyApiCost > 0 ? Math.round(Math.abs(results.annualSavings) / (results.monthlyApiCost * 12) * 100) : 0}
+				{@const specialistInfo = specialist}
+				{@const precInfo = PRECISION_OPTIONS.find(p => p.id === precision) ?? PRECISION_OPTIONS[0]}
 
-			<div class="report-hero reveal" style="animation-delay: 0ms">
-				<span class="report-headline settle" style="color: {savingsPositive ? '#00ac3a' : '#f13242'}">
-					{savingsPositive ? 'save' : 'costs'} {formatUsd(Math.abs(results.annualSavings))}/yr
-				</span>
-				<span class="report-subline">
-					{savingsPositive ? `${savingsPct}% less` : `${savingsPct}% more`} than {apiModel.name}
-				</span>
-			</div>
+				<div class="report-hero reveal" style="animation-delay: 0ms">
+					<span class="report-headline settle" style="color: {savingsPositive ? '#00ac3a' : '#f13242'}">
+						{savingsPositive ? 'save' : 'costs'} {formatUsd(Math.abs(results.annualSavings))}/yr
+					</span>
+					<span class="report-subline">
+						{savingsPositive ? `${savingsPct}% less` : `${savingsPct}% more`} than {apiModel.name}
+					</span>
+				</div>
 
-			<div class="report-breakdown reveal" style="animation-delay: 100ms">
-				<div class="breakdown-section">
-					<span class="breakdown-header">comparison</span>
-					<div class="breakdown-cols">
-						<div class="breakdown-col">
-							<span class="breakdown-col-label">{apiModel.name}</span>
-							<span class="breakdown-col-big">{formatUsd(results.monthlyApiCost * 12)}<span class="cost-per">/yr</span></span>
-						</div>
-						<div class="breakdown-col">
-							<span class="breakdown-col-label">{specialistInfo?.name ?? 'specialist'} specialist</span>
-							<span class="breakdown-col-big">{formatUsd(results.monthlySelfHostedCost * 12)}<span class="cost-per">/yr</span></span>
+				<div class="report-breakdown reveal" style="animation-delay: 100ms">
+					<div class="breakdown-section">
+						<span class="breakdown-header">comparison</span>
+						<div class="breakdown-cols">
+							<div class="breakdown-col">
+								<span class="breakdown-col-label">{apiModel.name}</span>
+								<span class="breakdown-col-big">{formatUsd(results.monthlyApiCost * 12)}<span class="cost-per">/yr</span></span>
+							</div>
+							<div class="breakdown-col">
+								<span class="breakdown-col-label">{specialistInfo?.name ?? 'specialist'} specialist</span>
+								<span class="breakdown-col-big">{formatUsd(results.monthlySelfHostedCost * 12)}<span class="cost-per">/yr</span></span>
+							</div>
 						</div>
 					</div>
+
+					<div class="breakdown-section">
+						<span class="breakdown-header">configuration</span>
+						<button class="breakdown-row" onclick={() => pushParams({ step: 'model' })}>
+							<span class="breakdown-label">generalist model</span>
+							<span class="breakdown-value">{apiModel.name} <span class="breakdown-detail">${apiModel.inputPer1M}/${apiModel.outputPer1M} per 1M</span></span>
+						</button>
+						<button class="breakdown-row" onclick={() => pushParams({ step: 'specialist' })}>
+							<span class="breakdown-label">specialist</span>
+							<span class="breakdown-value">{specialistInfo?.name ?? 'specialist'} <span class="breakdown-detail">{specialistInfo?.suited ?? ''}</span></span>
+						</button>
+						<button class="breakdown-row" onclick={() => pushParams({ step: 'workload' })}>
+							<span class="breakdown-label">volume</span>
+							<span class="breakdown-value">{formatNum(monthlyTokens * 12)} tokens/yr <span class="breakdown-detail">{hasCallsMode ? `${formatNum(callsPerMonth)}/mo × ${formatNum(tokensPerCall)} tok` : ''} · {inputRatio}:{100 - inputRatio} in:out</span></span>
+						</button>
+						<button class="breakdown-row" onclick={() => pushParams({ step: 'gpu' })}>
+							<span class="breakdown-label">infrastructure</span>
+							<span class="breakdown-value">{results.gpusUsed}× {selectedGpu.name} <span class="breakdown-detail">{precInfo.name} · {efficiency}% efficiency · ${selectedGpu.costPerHour}/hr each</span></span>
+						</button>
+					</div>
 				</div>
 
-				<div class="breakdown-section">
-					<span class="breakdown-header">configuration</span>
-					<button class="breakdown-row" onclick={() => pushParams({ step: 'model' })}>
-						<span class="breakdown-label">generalist model</span>
-						<span class="breakdown-value">{apiModel.name} <span class="breakdown-detail">${apiModel.inputPer1M}/${apiModel.outputPer1M} per 1M</span></span>
-					</button>
-					<button class="breakdown-row" onclick={() => pushParams({ step: 'specialist' })}>
-						<span class="breakdown-label">specialist</span>
-						<span class="breakdown-value">{specialistInfo?.name ?? 'specialist'} <span class="breakdown-detail">{specialistInfo?.suited ?? ''}</span></span>
-					</button>
-					<button class="breakdown-row" onclick={() => pushParams({ step: 'workload' })}>
-						<span class="breakdown-label">volume</span>
-						<span class="breakdown-value">{formatNum(monthlyTokens * 12)} tokens/yr <span class="breakdown-detail">{hasCallsMode ? `${formatNum(callsPerMonth)}/mo × ${formatNum(tokensPerCall)} tok` : ''} · {inputRatio}:{100 - inputRatio} in:out</span></span>
-					</button>
-					<button class="breakdown-row" onclick={() => pushParams({ step: 'gpu' })}>
-						<span class="breakdown-label">infrastructure</span>
-						<span class="breakdown-value">{results.gpusUsed}× {selectedGpu.name} <span class="breakdown-detail">{precInfo.name} · {efficiency}% efficiency · ${selectedGpu.costPerHour}/hr each</span></span>
-					</button>
+				<a href="https://www.adaptive-ml.com/contact-us" class="report-cta reveal" style="animation-delay: 300ms" target="_blank" rel="noopener">
+					<span class="cta-icon">{@html symbolSvg}</span>
+					<span class="cta-text">talk to an expert</span>
+					<svg class="cta-arrow" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+				</a>
+
+				<div class="nav-row reveal" style="animation-delay: 350ms">
+					<button class="nav-btn" onclick={prevStep}>← back</button>
+					<span></span>
 				</div>
-			</div>
-
-			<a href="https://www.adaptive-ml.com/contact-us" class="report-cta reveal" style="animation-delay: 300ms" target="_blank" rel="noopener">
-				<span class="cta-icon">{@html symbolSvg}</span>
-				<span class="cta-text">talk to an expert</span>
-				<svg class="cta-arrow" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
-			</a>
-
-			<div class="nav-row reveal" style="animation-delay: 350ms">
-				<button class="nav-btn" onclick={prevStep}>← back</button>
-				<span></span>
-			</div>
-		{/if}
-	</div>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <style>
+	/* === Start page === */
+	.start-page {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		gap: 24px;
+		padding: 64px 24px;
+		min-height: 360px;
+	}
+
+	.start-title {
+		font-family: var(--font-mono);
+		font-size: 28px;
+		font-weight: 700;
+		color: var(--text);
+		margin: 0;
+	}
+
+	.start-desc {
+		font-size: 14px;
+		color: var(--text-dim);
+		margin: 0;
+		max-width: 380px;
+		line-height: 1.6;
+	}
+
+	.start-btn {
+		font-family: var(--font-mono);
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--void);
+		background: var(--text);
+		border: none;
+		padding: 10px 32px;
+		border-radius: 4px;
+		cursor: pointer;
+		margin-top: 8px;
+		transition: border-radius 200ms ease;
+	}
+
+	.start-btn:hover {
+		border-radius: 18px;
+	}
+
 	/* === Stepper === */
 	.stepper {
 		display: flex;
@@ -1000,197 +804,15 @@
 		margin: 0 auto;
 	}
 
-	.calc-header {
-		text-align: center;
-		padding: 16px 24px 12px;
-		border-bottom: 1px solid var(--rule);
-	}
-	.calc-title {
-		font-family: var(--font-mono);
-		font-size: 16px;
-		font-weight: 700;
-		color: var(--text);
-		margin: 0;
-	}
-	.calc-desc {
-		font-size: 13px;
-		color: var(--text-dim);
-		margin: 4px 0 0;
-	}
-
-	/* === Platform (never scrolls) === */
-	.platform {
-		display: flex;
-		flex-direction: column;
-		align-items: stretch;
+	/* === Platform viz: hidden on mobile === */
+	.platform-wrapper {
 		flex-shrink: 0;
 	}
 
-	.labels-row {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
+	/* === Mobile context bar: hidden on desktop === */
+	.mobile-context {
+		display: none;
 	}
-
-	.shape-label {
-		font-family: var(--font-mono);
-		font-size: 10px;
-		font-weight: 500;
-		color: var(--text-muted);
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		text-align: center;
-		transition: opacity 200ms ease;
-	}
-
-	.shape-label.dim { opacity: 0.2; }
-
-	/* Costs (above shapes) */
-	.costs-row {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		padding: 4px 0;
-	}
-
-	.cost-val {
-		font-family: var(--font-mono);
-		font-size: 15px;
-		font-weight: 700;
-		color: var(--text-faint);
-		letter-spacing: -0.02em;
-		text-align: center;
-		transition: color 150ms ease, opacity 200ms ease;
-	}
-
-	.cost-val.has-data { color: var(--text-dim); }
-
-	.hidden { visibility: hidden; }
-
-	.cost-per {
-		font-size: 10px;
-		font-weight: 400;
-	}
-
-	/* Ground: shapes sit on the line */
-	.ground {
-		position: relative;
-	}
-
-	.ground-line {
-		position: absolute;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		height: 1px;
-		background: var(--rule);
-	}
-
-	.shapes-row {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		align-items: end;
-		justify-items: center;
-		position: relative;
-		z-index: 1;
-		min-height: 120px;
-	}
-
-	.shape-area {
-		background: none;
-		border: none;
-		padding: 0;
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.gen-shape {
-		width: 120px;
-		height: 120px;
-		overflow: visible;
-		transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
-		transform-origin: center bottom;
-	}
-
-	@keyframes tap {
-		0% { transform: scale(var(--gen-scale, 1)); }
-		30% { transform: scale(calc(var(--gen-scale, 1) * 0.92)); }
-		100% { transform: scale(var(--gen-scale, 1)); }
-	}
-
-	.gen-shape:global(.tap) { animation: tap 300ms ease-out; }
-
-	.gen-shape path { stroke: var(--text); transition: opacity 200ms ease; }
-	.gen-shape.dim path { opacity: 0.2; }
-
-	.vendor-logo { color: var(--text-muted); transition: opacity 200ms ease; }
-	.gen-shape.dim .vendor-logo { opacity: 0.2; }
-
-	.spec-area {
-		position: relative;
-	}
-
-	.spec-mover {
-		width: 84px;
-		height: 84px;
-		animation: float 3s ease-in-out infinite;
-	}
-
-	@keyframes float {
-		0%, 100% { transform: translateY(0); }
-		25% { transform: translateY(-5px); }
-		50% { transform: translateY(-2px); }
-		75% { transform: translateY(-6px); }
-	}
-
-	.spec-shape {
-		width: 84px;
-		height: 84px;
-		overflow: visible;
-		transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
-		transform-origin: center center;
-	}
-
-	.spec-shape path { stroke: var(--text); transition: opacity 200ms ease; }
-	.spec-shape.dim path { opacity: 0.2; }
-
-	.size-label {
-		font-family: var(--font-mono);
-		font-size: 12px;
-		font-weight: 700;
-		fill: var(--text-muted);
-		transition: opacity 200ms ease;
-	}
-	.spec-shape.dim .size-label { opacity: 0.2; }
-
-	/* Savings (below the line) */
-	.savings-row {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 8px;
-		padding: 8px 0;
-		min-height: 32px;
-	}
-
-	.savings-row.collapsed { min-height: 0; padding: 0; }
-
-	.savings-label {
-		font-family: var(--font-mono);
-		font-size: 10px;
-		color: var(--text-muted);
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-	}
-
-	.savings-num {
-		font-family: var(--font-mono);
-		font-size: 14px;
-		font-weight: 700;
-		color: var(--green, #00ac3a);
-	}
-
-	.savings-num.neg { color: var(--red, #f13242); }
 
 	/* === Controls === */
 	.controls {
@@ -1205,7 +827,6 @@
 		font-weight: 700;
 		color: var(--text);
 	}
-
 
 	/* === Model grid === */
 	.model-grid {
@@ -1254,7 +875,6 @@
 		color: var(--text-muted);
 	}
 
-
 	/* === Size step === */
 	.size-grid {
 		display: grid;
@@ -1296,90 +916,6 @@
 		font-size: 11px;
 		color: var(--text-faint);
 	}
-
-	/* === Specialist combobox === */
-	.combo { position: relative; z-index: 2; }
-	.combo-trigger {
-		display: flex;
-		align-items: center;
-		width: 100%;
-		padding: 10px 12px;
-		background: rgba(10, 10, 12, 0.8);
-		border: 1px solid var(--rule);
-		border-radius: 6px;
-		color: var(--text-body);
-		font-family: var(--font-body);
-		font-size: 13px;
-		cursor: pointer;
-		text-align: left;
-		transition: border-color 150ms ease, border-radius 200ms ease;
-	}
-	.combo-trigger:hover { border-color: var(--text-muted); }
-	.combo.open .combo-trigger { border-color: var(--text-muted); border-radius: 6px 6px 0 0; }
-	.combo.open.flip .combo-trigger { border-radius: 0 0 6px 6px; }
-	.combo-selected { font-weight: 500; color: var(--text); }
-	.combo-selected-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-left: 8px; }
-	.combo-placeholder { color: var(--text-faint); }
-	.combo-caret { margin-left: auto; color: var(--text-faint); font-size: 11px; }
-	.combo-dropdown {
-		background: rgba(10, 10, 12, 0.95);
-		border: 1px solid var(--rule);
-		border-top: none;
-		border-radius: 0 0 6px 6px;
-		overflow: hidden;
-	}
-	.combo.flip .combo-dropdown {
-		position: absolute;
-		bottom: 100%;
-		left: 0;
-		right: 0;
-		border-top: 1px solid var(--rule);
-		border-bottom: none;
-		border-radius: 6px 6px 0 0;
-	}
-	.combo-search {
-		width: 100%;
-		padding: 8px 12px;
-		background: rgba(10, 10, 12, 0.6);
-		border: none;
-		border-bottom: 1px solid var(--rule);
-		color: var(--text-body);
-		font-family: var(--font-body);
-		font-size: 12px;
-		outline: none;
-	}
-	.combo-search::placeholder { color: var(--text-faint); }
-	.combo-list { max-height: 240px; overflow-y: auto; }
-	.combo-divider { height: 1px; background: var(--rule); margin: 4px 12px; }
-	.combo-item {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		width: 100%;
-		padding: 8px 12px;
-		background: none;
-		border: none;
-		color: var(--text-body);
-		font-family: var(--font-body);
-		font-size: 13px;
-		cursor: pointer;
-		text-align: left;
-		transition: background 100ms ease;
-	}
-	.combo-item:hover { background: rgba(255, 255, 255, 0.05); }
-	.combo-item.selected { color: var(--text); }
-	.combo-star { color: var(--text-muted); font-size: 10px; }
-	.combo-item-right { display: flex; align-items: center; gap: 8px; }
-	.combo-item-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
-	.combo-item-suited { font-size: 11px; color: var(--text-faint); }
-	.combo-item-hf {
-		font-family: var(--font-mono);
-		font-size: 10px;
-		color: var(--text-faint);
-		text-decoration: none;
-		transition: color 150ms ease;
-	}
-	.combo-item-hf:hover { color: var(--text-muted); }
 
 	/* === Workload step === */
 	.workload-group {
@@ -1567,7 +1103,6 @@
 		border-radius: 6px;
 	}
 
-
 	/* === Navigation === */
 	.nav-row {
 		display: flex;
@@ -1651,8 +1186,6 @@
 		font-size: 9px;
 		color: var(--text-muted);
 	}
-
-
 
 	.count-controls {
 		display: flex;
@@ -1752,7 +1285,6 @@
 		transition: color 300ms ease;
 	}
 
-
 	.help-btn {
 		width: 14px;
 		height: 14px;
@@ -1791,8 +1323,7 @@
 		color: var(--text-body);
 	}
 
-
-/* === Report === */
+	/* === Report === */
 	@keyframes reveal {
 		from { opacity: 0; transform: translateY(12px); }
 		to { opacity: 1; transform: translateY(0); }
@@ -1929,8 +1460,12 @@
 		color: var(--text-dim);
 	}
 
+	.cost-per {
+		font-size: 10px;
+		font-weight: 400;
+	}
 
-/* CTA */
+	/* CTA */
 	.report-cta {
 		display: flex;
 		align-items: center;
@@ -2001,108 +1536,51 @@
 	}
 	.methodology-body a:hover { color: var(--text-body); }
 
+	/* === Mobile === */
 	@media (max-width: 768px) {
-		.calc-header { padding: 8px 0; }
-		.calc-title { font-size: 14px; }
-		.calc-desc { font-size: 11px; margin: 2px 0 0; }
+		.start-page {
+			padding: 48px 16px;
+		}
+		.start-title { font-size: 22px; }
+		.start-desc { font-size: 13px; }
 		.stepper { padding: 8px 0 4px; }
-		.shapes-row { min-height: 72px; }
-		.gen-shape { width: 72px; height: 72px; }
-		.spec-mover { width: 52px; height: 52px; }
-		.spec-shape { width: 52px; height: 52px; }
-		.cost-val { font-size: 12px; }
-		.savings-row { padding: 2px 0; min-height: 20px; }
-		.savings-num { font-size: 12px; }
+		.platform-wrapper { display: none; }
+		.mobile-context {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 8px;
+			padding: 8px 0;
+			min-height: 28px;
+		}
+		.mobile-model {
+			font-family: var(--font-mono);
+			font-size: 12px;
+			font-weight: 600;
+			color: var(--text-dim);
+		}
+		.mobile-vs {
+			font-family: var(--font-mono);
+			font-size: 10px;
+			color: var(--text-faint);
+		}
+		.mobile-savings {
+			font-family: var(--font-mono);
+			font-size: 12px;
+			font-weight: 700;
+			color: var(--green, #00ac3a);
+			margin-left: 4px;
+		}
+		.mobile-savings.neg { color: var(--red, #f13242); }
 		.model-grid { grid-template-columns: 1fr; }
 		.prompt { font-size: 15px; }
-		.model-card { padding: 8px 10px; }
-		.gpu-card { padding: 8px 10px; }
-		.size-card { padding: 8px 10px; }
-
-	}
-
-	/* === Bottom sheet (mobile specialist picker) === */
-	.sheet-backdrop {
-		position: fixed;
-		inset: 0;
-		background: rgba(0, 0, 0, 0.6);
-		z-index: 100;
-	}
-
-	.sheet {
-		position: fixed;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		z-index: 101;
-		background: rgba(10, 10, 12, 0.95);
-		border-top: 1px solid var(--rule);
-		border-radius: 12px 12px 0 0;
-		display: flex;
-		flex-direction: column;
-		max-height: 70vh;
-		animation: sheetUp 200ms cubic-bezier(0.16, 1, 0.3, 1);
-	}
-
-	@keyframes sheetUp {
-		from { transform: translateY(100%); }
-		to { transform: translateY(0); }
-	}
-
-	.sheet-handle {
-		width: 32px;
-		height: 4px;
-		border-radius: 2px;
-		background: var(--text-faint);
-		margin: 8px auto;
-		flex-shrink: 0;
-	}
-
-	.sheet-search {
-		width: 100%;
-		padding: 12px 16px;
-		background: none;
-		border: none;
-		border-bottom: 1px solid var(--rule);
-		color: var(--text-body);
-		font-family: var(--font-body);
-		font-size: 16px;
-		outline: none;
-		flex-shrink: 0;
-	}
-	.sheet-search::placeholder { color: var(--text-faint); }
-
-	.sheet-list {
-		flex: 1;
-		overflow-y: auto;
-		-webkit-overflow-scrolling: touch;
-		padding-bottom: env(safe-area-inset-bottom, 16px);
-	}
-
-	.sheet-item {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		width: 100%;
-		padding: 14px 16px;
-		background: none;
-		border: none;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-		color: var(--text-body);
-		font-family: var(--font-body);
-		font-size: 15px;
-		cursor: pointer;
-		text-align: left;
-	}
-	.sheet-item.selected { color: var(--text); }
-	.sheet-item:active { background: rgba(255, 255, 255, 0.05); }
-
-	.sheet-item-meta {
-		font-family: var(--font-mono);
-		font-size: 12px;
-		color: var(--text-muted);
-		display: flex;
-		align-items: center;
-		gap: 6px;
+		.model-card { padding: 10px 12px; }
+		.gpu-card { padding: 10px 12px; }
+		.size-card { padding: 10px 12px; }
+		.task-btn { padding: 12px 8px; }
+		.nav-btn { padding: 12px 20px; }
+		.count-btn { width: 44px; height: 44px; }
+		.count-mode { padding: 10px 12px; }
+		.help-btn { width: 24px; height: 24px; font-size: 11px; }
 	}
 </style>

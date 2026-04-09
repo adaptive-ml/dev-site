@@ -110,6 +110,14 @@ export interface CalcOutputs {
 	modelFitsGpu: boolean;
 }
 
+export function formatUsd(n: number): string {
+	if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+	if (n >= 100) return `$${Math.round(n).toLocaleString()}`;
+	if (n >= 0.01) return `$${n.toFixed(2)}`;
+	if (n >= 0.001) return `$${n.toFixed(4)}`;
+	return `$${n.toFixed(6)}`;
+}
+
 export function calculate(inputs: CalcInputs): CalcOutputs {
 	const { monthlyTokens, apiModel, activeParamsB, totalParamsB, inputRatio = 0.85, tokensPerCall = 4000, gpu = GPU_OPTIONS[0], gpuCountOverride = null, precision = 'fp8', efficiency = DEFAULT_EFFICIENCY } = inputs;
 
