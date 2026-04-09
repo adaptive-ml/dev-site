@@ -348,7 +348,6 @@
 	}
 
 	function selectModel(id: string) {
-		showOther = false;
 		replaceParams({ model: id });
 	}
 
