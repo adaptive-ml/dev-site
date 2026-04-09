@@ -7,6 +7,9 @@
 	import { calculate, PRIMARY_MODELS, ALL_MODELS, GPU_OPTIONS, PRECISION_OPTIONS, MODEL_DATABASE, type ApiModel, type GpuSpec, type Precision, type ModelEntry } from '$lib/cost-engine';
 	import Fuse from 'fuse.js';
 
+	let innerWidth = $state(browser ? window.innerWidth : 1024);
+	const isMobile = $derived(innerWidth <= 768);
+
 	function autoFocus(node: HTMLInputElement) { node.focus(); node.select(); }
 	function clickOutside(node: HTMLElement, callback: () => void) {
 		function handle(e: MouseEvent) { if (!node.contains(e.target as Node)) callback(); }
@@ -26,6 +29,8 @@
 		? modelFuse.search(modelQuery).map(r => r.item)
 		: [...MODEL_DATABASE.filter(m => m.primary), ...MODEL_DATABASE.filter(m => !m.primary)]
 	);
+	let comboTriggerEl = $state<HTMLElement>();
+	let comboFlip = $state(false);
 	let editingGpuCount = $state(false);
 	let gpuCountInputVal = $state('');
 	let hoveredPrecision = $state<Precision | null>(null);
@@ -74,13 +79,17 @@
 		report: !!params.get('gpu'),
 	}));
 
+	let calcEl = $state<HTMLElement>();
+	function scrollToTop() {
+		calcEl?.closest('.page')?.scrollTo({ top: 0 });
+	}
 	function nextStep() {
 		const i = STEPS.indexOf(step);
-		if (i < STEPS.length - 1) pushParams({ step: STEPS[i + 1] });
+		if (i < STEPS.length - 1) { pushParams({ step: STEPS[i + 1] }); scrollToTop(); }
 	}
 	function prevStep() {
 		const i = STEPS.indexOf(step);
-		if (i > 0) pushParams({ step: STEPS[i - 1] });
+		if (i > 0) { pushParams({ step: STEPS[i - 1] }); scrollToTop(); }
 	}
 
 	const inputRatio = $derived(Number(params.get('ratio')) || 75);
@@ -343,7 +352,7 @@
 		if (n >= 1e12) return `${(n / 1e12).toFixed(1)}T`;
 		if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
 		if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-		if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`;
+		if (n >= 1e3) { const k = n / 1e3; return k < 10 ? `${k.toFixed(1)}K` : `${k.toFixed(0)}K`; }
 		return n.toString();
 	}
 
@@ -400,7 +409,9 @@
 	}
 </script>
 
-<div class="calc">
+<svelte:window bind:innerWidth />
+
+<div class="calc" bind:this={calcEl}>
 	<div class="calc-header">
 		<h1 class="calc-title">GPU cost calculator</h1>
 		<p class="calc-desc">compare the cost of a generalist model to a self-hosted specialist at scale</p>
@@ -443,7 +454,7 @@
 
 		<div class="ground">
 			<div class="shapes-row">
-				<button class="shape-area" onclick={(e) => { e.currentTarget.querySelector('.gen-shape')?.classList.remove('tap'); requestAnimationFrame(() => e.currentTarget.querySelector('.gen-shape')?.classList.add('tap')); }} aria-label="Generalist model">
+				<button class="shape-area" onclick={(e) => { const el = e.currentTarget?.querySelector('.gen-shape'); el?.classList.remove('tap'); requestAnimationFrame(() => el?.classList.add('tap')); }} aria-label="Generalist model">
 					<svg viewBox="0 0 100 100" class="shape gen-shape" class:dim={!genActive} style="--gen-scale: {genActive ? genScale : 1}; transform: scale({genActive ? genScale : 1})" onanimationend={(e) => e.currentTarget.classList.remove('tap')}>
 						<path d={generalistPath} fill="none" stroke-width="1" />
 						{#if genActive && activeLogo}
@@ -544,10 +555,18 @@
 			<h2 class="prompt">choose a specialist <button class="help-btn" onclick={() => toggleHelp('specialist')}>?</button></h2>
 			{#if activeHelp === 'specialist'}<span class="help-text">an <a href="/training">open model</a> <a href="/training/post-training/sft">fine-tuned</a> for your task using <a href="/optimization">RL</a>, then self-hosted on your own GPUs instead of calling an API.</span>{/if}
 
-			<div class="combo" class:open={comboOpen} use:clickOutside={() => { comboOpen = false; modelQuery = ''; }}>
+			<div class="combo" class:open={comboOpen} class:flip={comboFlip} use:clickOutside={() => { if (!isMobile) { comboOpen = false; modelQuery = ''; } }}>
 				<button
 					class="combo-trigger"
-					onclick={() => { comboOpen = !comboOpen; if (comboOpen) requestAnimationFrame(() => comboInputEl?.focus()); }}
+					bind:this={comboTriggerEl}
+					onclick={() => {
+						if (!comboOpen && !isMobile && comboTriggerEl) {
+							const rect = comboTriggerEl.getBoundingClientRect();
+							comboFlip = (window.innerHeight - rect.bottom) < 260;
+						}
+						comboOpen = !comboOpen;
+						if (comboOpen && !isMobile) requestAnimationFrame(() => comboInputEl?.focus());
+					}}
 				>
 					{#if specialist}
 						<span class="combo-selected">{specialist.name}</span>
@@ -557,7 +576,7 @@
 					{/if}
 					<span class="combo-caret">{comboOpen ? '▴' : '▾'}</span>
 				</button>
-				{#if comboOpen}
+				{#if comboOpen && !isMobile}
 					<div class="combo-dropdown">
 						<input
 							class="combo-search"
@@ -590,6 +609,39 @@
 					</div>
 				{/if}
 			</div>
+
+			{#if comboOpen && isMobile}
+				<div class="sheet-backdrop" onclick={() => { comboOpen = false; modelQuery = ''; }} role="presentation"></div>
+				<div class="sheet">
+					<div class="sheet-handle"></div>
+					<input
+						class="sheet-search"
+						type="text"
+						placeholder="search models..."
+						bind:value={modelQuery}
+						bind:this={comboInputEl}
+						use:autoFocus
+					/>
+					<div class="sheet-list">
+						{#each filteredModels as m}
+							{@const isPrimary = !!m.primary}
+							{@const isFirst = m === filteredModels.find(f => !f.primary)}
+							{#if isFirst && !modelQuery}<div class="combo-divider"></div>{/if}
+							<button
+								class="sheet-item"
+								class:selected={specialistName === m.name}
+								onclick={() => selectSpecialist(m)}
+							>
+								<span class="combo-item-name">{#if isPrimary}<span class="combo-star">★</span> {/if}{m.name}</span>
+								<span class="sheet-item-meta">
+									{#if m.isMoE}{m.activeParamsB}B / {m.totalParamsB}B MoE{:else}{m.activeParamsB}B{/if}
+									{#if m.suited}<span class="combo-item-suited">{m.suited}</span>{/if}
+								</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
 
 			<details class="calc-methodology">
 				<summary class="methodology-toggle">how is this calculated?</summary>
@@ -942,12 +994,10 @@
 	.calc {
 		width: 100%;
 		max-width: 600px;
-		height: 100%;
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
 		margin: 0 auto;
-		overflow: hidden;
 	}
 
 	.calc-header {
@@ -1037,11 +1087,11 @@
 	.shapes-row {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		align-items: center;
+		align-items: end;
 		justify-items: center;
 		position: relative;
 		z-index: 1;
-		height: 120px;
+		min-height: 120px;
 	}
 
 	.shape-area {
@@ -1144,13 +1194,9 @@
 
 	/* === Controls === */
 	.controls {
-		flex: 1;
 		display: flex;
 		flex-direction: column;
 		gap: 20px;
-		min-height: 0;
-		overflow-y: auto;
-		padding-right: 8px;
 	}
 
 	.prompt {
@@ -1252,7 +1298,7 @@
 	}
 
 	/* === Specialist combobox === */
-	.combo { position: relative; }
+	.combo { position: relative; z-index: 2; }
 	.combo-trigger {
 		display: flex;
 		align-items: center;
@@ -1270,15 +1316,26 @@
 	}
 	.combo-trigger:hover { border-color: var(--text-muted); }
 	.combo.open .combo-trigger { border-color: var(--text-muted); border-radius: 6px 6px 0 0; }
+	.combo.open.flip .combo-trigger { border-radius: 0 0 6px 6px; }
 	.combo-selected { font-weight: 500; color: var(--text); }
 	.combo-selected-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-left: 8px; }
 	.combo-placeholder { color: var(--text-faint); }
 	.combo-caret { margin-left: auto; color: var(--text-faint); font-size: 11px; }
 	.combo-dropdown {
+		background: rgba(10, 10, 12, 0.95);
 		border: 1px solid var(--rule);
 		border-top: none;
 		border-radius: 0 0 6px 6px;
 		overflow: hidden;
+	}
+	.combo.flip .combo-dropdown {
+		position: absolute;
+		bottom: 100%;
+		left: 0;
+		right: 0;
+		border-top: 1px solid var(--rule);
+		border-bottom: none;
+		border-radius: 6px 6px 0 0;
 	}
 	.combo-search {
 		width: 100%;
@@ -1945,10 +2002,107 @@
 	.methodology-body a:hover { color: var(--text-body); }
 
 	@media (max-width: 768px) {
-		.gen-shape { width: 96px; height: 96px; }
-		.spec-mover { width: 66px; height: 66px; }
-		.spec-shape { width: 66px; height: 66px; }
-		.cost-val { font-size: 13px; }
+		.calc-header { padding: 8px 0; }
+		.calc-title { font-size: 14px; }
+		.calc-desc { font-size: 11px; margin: 2px 0 0; }
+		.stepper { padding: 8px 0 4px; }
+		.shapes-row { min-height: 72px; }
+		.gen-shape { width: 72px; height: 72px; }
+		.spec-mover { width: 52px; height: 52px; }
+		.spec-shape { width: 52px; height: 52px; }
+		.cost-val { font-size: 12px; }
+		.savings-row { padding: 2px 0; min-height: 20px; }
+		.savings-num { font-size: 12px; }
 		.model-grid { grid-template-columns: 1fr; }
+		.prompt { font-size: 15px; }
+		.model-card { padding: 8px 10px; }
+		.gpu-card { padding: 8px 10px; }
+		.size-card { padding: 8px 10px; }
+
+	}
+
+	/* === Bottom sheet (mobile specialist picker) === */
+	.sheet-backdrop {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.6);
+		z-index: 100;
+	}
+
+	.sheet {
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		z-index: 101;
+		background: rgba(10, 10, 12, 0.95);
+		border-top: 1px solid var(--rule);
+		border-radius: 12px 12px 0 0;
+		display: flex;
+		flex-direction: column;
+		max-height: 70vh;
+		animation: sheetUp 200ms cubic-bezier(0.16, 1, 0.3, 1);
+	}
+
+	@keyframes sheetUp {
+		from { transform: translateY(100%); }
+		to { transform: translateY(0); }
+	}
+
+	.sheet-handle {
+		width: 32px;
+		height: 4px;
+		border-radius: 2px;
+		background: var(--text-faint);
+		margin: 8px auto;
+		flex-shrink: 0;
+	}
+
+	.sheet-search {
+		width: 100%;
+		padding: 12px 16px;
+		background: none;
+		border: none;
+		border-bottom: 1px solid var(--rule);
+		color: var(--text-body);
+		font-family: var(--font-body);
+		font-size: 16px;
+		outline: none;
+		flex-shrink: 0;
+	}
+	.sheet-search::placeholder { color: var(--text-faint); }
+
+	.sheet-list {
+		flex: 1;
+		overflow-y: auto;
+		-webkit-overflow-scrolling: touch;
+		padding-bottom: env(safe-area-inset-bottom, 16px);
+	}
+
+	.sheet-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		width: 100%;
+		padding: 14px 16px;
+		background: none;
+		border: none;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		color: var(--text-body);
+		font-family: var(--font-body);
+		font-size: 15px;
+		cursor: pointer;
+		text-align: left;
+	}
+	.sheet-item.selected { color: var(--text); }
+	.sheet-item:active { background: rgba(255, 255, 255, 0.05); }
+
+	.sheet-item-meta {
+		font-family: var(--font-mono);
+		font-size: 12px;
+		color: var(--text-muted);
+		display: flex;
+		align-items: center;
+		gap: 6px;
 	}
 </style>

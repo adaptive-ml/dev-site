@@ -20,12 +20,15 @@ function collectHtmlFiles(dir: string): string[] {
 
 const htmlFiles = collectHtmlFiles(BUILD_DIR);
 
+const EXCLUDE = new Set(['/rlops/cost-calculator/index']);
+
 const urls = htmlFiles
 	.map((f) => {
 		const rel = relative(BUILD_DIR, f);
 		if (rel === 'index.html') return '/';
 		return '/' + rel.replace(/\.html$/, '');
 	})
+	.filter((url) => !EXCLUDE.has(url))
 	.sort();
 
 const xml = `<?xml version="1.0" encoding="UTF-8"?>

@@ -470,6 +470,10 @@
 			display: block;
 		}
 
+		.toolbar {
+			padding: 12px 16px;
+		}
+
 		.page-nav {
 			padding: 16px 20px 32px;
 		}

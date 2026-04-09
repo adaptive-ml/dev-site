@@ -52,6 +52,7 @@
 			<li><a href={resolve('/inference')}>Inference</a></li>
 			<li><a href={resolve('/evaluation')}>Evaluation</a></li>
 			<li><a href={resolve('/rlops')}>RLOps</a></li>
+			<li><a href={resolve('/cost-calculator')}>Cost calculator</a></li>
 			<li><a href={resolve('/faq')}>FAQ</a></li>
 		</ul>
 	</nav>

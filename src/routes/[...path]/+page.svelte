@@ -11,7 +11,7 @@
 	const pageRefs = $derived(getPageRefs(data.segments.join('/')));
 	const pageUrl = $derived(`${ORIGIN}/${data.segments.join('/')}`);
 	const ogImage = $derived(`${ORIGIN}/og/${data.segments[0]}.png`);
-	const isInteractive = $derived(data.segments.join('/') === 'rlops/cost-calculator');
+	const isInteractive = $derived(data.segments.join('/') === 'cost-calculator');
 
 	const breadcrumbLd = $derived({
 		"@context": "https://schema.org",
@@ -126,8 +126,7 @@
 	}
 
 	.page.app {
-		overflow: hidden;
-		padding: 16px 24px 0;
+		padding: 16px 24px 24px;
 		align-items: stretch;
 	}
 
@@ -349,6 +348,10 @@
 	@media (max-width: 768px) {
 		.page {
 			padding: 24px;
+		}
+
+		.page.app {
+			padding: 12px 16px 24px;
 		}
 
 		.prose :global(p),
