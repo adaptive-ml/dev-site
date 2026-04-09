@@ -15,6 +15,7 @@
 
 	let inputValue = $state('');
 	let open = $state(false);
+	let sheetOpen = $state(false);
 
 	const fuse = new Fuse(MODEL_DATABASE, { keys: ['name', 'vendor'], threshold: 0.4, distance: 100 });
 
@@ -33,70 +34,103 @@
 		if (model) {
 			onselect(model);
 			open = false;
+			sheetOpen = false;
 			inputValue = '';
 		}
 	}
+
+	function closeSheet() {
+		sheetOpen = false;
+		inputValue = '';
+	}
 </script>
 
-<Combobox.Root
-	type="single"
-	value={specialist?.name ?? ''}
-	onValueChange={handleSelect}
-	bind:open
->
-	<div class="combo-wrapper">
-		<Combobox.Input
-			class="combo-input"
-			placeholder={specialist ? specialist.name : 'search models...'}
-			onclick={() => { open = true; }}
-			oninput={(e) => { inputValue = e.currentTarget.value; }}
-		/>
-		{#if specialist && !open}
-			<span class="combo-meta">
+{#if isMobile}
+	<!-- Mobile: button trigger + bottom sheet -->
+	<button class="mobile-trigger" onclick={() => { sheetOpen = true; }}>
+		{#if specialist}
+			<span class="trigger-name">{specialist.name}</span>
+			<span class="trigger-meta">
 				{#if specialist.isMoE}{specialist.activeParamsB}B / {specialist.totalParamsB}B MoE{:else}{specialist.activeParamsB}B{/if}
 			</span>
+		{:else}
+			<span class="trigger-placeholder">select a model</span>
 		{/if}
-	</div>
+		<span class="trigger-caret">▾</span>
+	</button>
 
-	{#if isMobile}
-		{#if open}
-			<div class="sheet-backdrop" onclick={() => { open = false; inputValue = ''; }} role="presentation"></div>
-			<div class="sheet">
-				<div class="sheet-handle"></div>
-				<!-- svelte-ignore a11y_autofocus -->
+	{#if sheetOpen}
+		<div class="sheet-backdrop" onclick={closeSheet} role="presentation"></div>
+		<div class="sheet">
+			<div class="sheet-handle"></div>
+			<div class="sheet-search-row">
 				<input
 					class="sheet-search"
 					type="text"
 					placeholder="search models..."
 					bind:value={inputValue}
-					autofocus
+					enterkeyhint="done"
 				/>
-				<div class="sheet-list">
-					{#each primaryModels as m (m.name)}
-						<Combobox.Item value={m.name} label={m.name} class="sheet-item {specialist?.name === m.name ? 'selected' : ''}">
-							<span class="item-name"><span class="item-star">★</span> {m.name}</span>
-							<span class="sheet-item-meta">
-								{#if m.isMoE}{m.activeParamsB}B / {m.totalParamsB}B MoE{:else}{m.activeParamsB}B{/if}
-								{#if m.suited}<span class="item-suited">{m.suited}</span>{/if}
-							</span>
-						</Combobox.Item>
-					{/each}
-					{#if primaryModels.length > 0 && otherModels.length > 0 && !inputValue}
-						<div class="combo-divider"></div>
-					{/if}
-					{#each otherModels as m (m.name)}
-						<Combobox.Item value={m.name} label={m.name} class="sheet-item {specialist?.name === m.name ? 'selected' : ''}">
-							<span class="item-name">{m.name}</span>
-							<span class="sheet-item-meta">
-								{#if m.isMoE}{m.activeParamsB}B / {m.totalParamsB}B MoE{:else}{m.activeParamsB}B{/if}
-								{#if m.suited}<span class="item-suited">{m.suited}</span>{/if}
-							</span>
-						</Combobox.Item>
-					{/each}
-				</div>
 			</div>
-		{/if}
-	{:else}
+			<div class="sheet-list">
+				{#each primaryModels as m (m.name)}
+					<button
+						class="sheet-item"
+						class:selected={specialist?.name === m.name}
+						onclick={() => handleSelect(m.name)}
+					>
+						<span class="sheet-item-top">
+							<span class="item-name"><span class="item-star">★</span> {m.name}</span>
+							{#if m.suited}<span class="item-suited">{m.suited}</span>{/if}
+						</span>
+						<span class="sheet-item-meta">
+							{#if m.isMoE}{m.activeParamsB}B / {m.totalParamsB}B MoE{:else}{m.activeParamsB}B{/if}
+						</span>
+					</button>
+				{/each}
+				{#if primaryModels.length > 0 && otherModels.length > 0 && !inputValue}
+					<div class="combo-divider"></div>
+				{/if}
+				{#each otherModels as m (m.name)}
+					<button
+						class="sheet-item"
+						class:selected={specialist?.name === m.name}
+						onclick={() => handleSelect(m.name)}
+					>
+						<span class="sheet-item-top">
+							<span class="item-name">{m.name}</span>
+							{#if m.suited}<span class="item-suited">{m.suited}</span>{/if}
+						</span>
+						<span class="sheet-item-meta">
+							{#if m.isMoE}{m.activeParamsB}B / {m.totalParamsB}B MoE{:else}{m.activeParamsB}B{/if}
+						</span>
+					</button>
+				{/each}
+			</div>
+		</div>
+	{/if}
+{:else}
+	<!-- Desktop: bits-ui combobox -->
+	<Combobox.Root
+		type="single"
+		value={specialist?.name ?? ''}
+		onValueChange={handleSelect}
+		bind:open
+	>
+		<div class="combo-wrapper">
+			<Combobox.Input
+				class="combo-input"
+				placeholder={specialist ? specialist.name : 'search models...'}
+				onclick={() => { open = true; }}
+				oninput={(e) => { inputValue = e.currentTarget.value; }}
+			/>
+			{#if specialist && !open}
+				<span class="combo-meta">
+					{#if specialist.isMoE}{specialist.activeParamsB}B / {specialist.totalParamsB}B MoE{:else}{specialist.activeParamsB}B{/if}
+				</span>
+			{/if}
+		</div>
+
 		<Combobox.Content class="combo-dropdown" sideOffset={0} align="start" side="bottom">
 			{#each primaryModels as m (m.name)}
 				<Combobox.Item value={m.name} label={m.name} class="combo-item {specialist?.name === m.name ? 'selected' : ''}">
@@ -122,11 +156,34 @@
 				</Combobox.Item>
 			{/each}
 		</Combobox.Content>
-	{/if}
-</Combobox.Root>
+	</Combobox.Root>
+{/if}
 
 <style>
-	/* Combo input trigger */
+	/* === Mobile trigger button === */
+	.mobile-trigger {
+		display: flex;
+		align-items: center;
+		width: 100%;
+		padding: 12px 14px;
+		background: rgba(10, 10, 12, 0.8);
+		border: 1px solid var(--rule);
+		border-radius: 6px;
+		color: var(--text-body);
+		font-family: var(--font-body);
+		font-size: 14px;
+		cursor: pointer;
+		text-align: left;
+		transition: border-color 150ms ease;
+		gap: 8px;
+	}
+	.mobile-trigger:active { border-color: var(--text-muted); }
+	.trigger-name { font-weight: 500; color: var(--text); flex: 1; }
+	.trigger-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+	.trigger-placeholder { color: var(--text-faint); flex: 1; }
+	.trigger-caret { color: var(--text-faint); font-size: 11px; }
+
+	/* === Desktop combo input === */
 	.combo-wrapper {
 		position: relative;
 		display: flex;
@@ -161,7 +218,7 @@
 		pointer-events: none;
 	}
 
-	/* Desktop dropdown */
+	/* === Desktop dropdown === */
 	:global(.combo-dropdown) {
 		background: rgba(10, 10, 12, 0.95);
 		border: 1px solid var(--rule);
@@ -209,7 +266,7 @@
 
 	.combo-divider { height: 1px; background: var(--rule); margin: 4px 12px; }
 
-	/* Mobile bottom sheet */
+	/* === Mobile bottom sheet === */
 	.sheet-backdrop {
 		position: fixed;
 		inset: 0;
@@ -246,19 +303,24 @@
 		flex-shrink: 0;
 	}
 
+	.sheet-search-row {
+		padding: 4px 12px 8px;
+		flex-shrink: 0;
+	}
+
 	.sheet-search {
 		width: 100%;
-		padding: 12px 16px;
-		background: none;
-		border: none;
-		border-bottom: 1px solid var(--rule);
+		padding: 10px 12px;
+		background: rgba(255, 255, 255, 0.06);
+		border: 1px solid var(--rule);
+		border-radius: 8px;
 		color: var(--text-body);
 		font-family: var(--font-body);
 		font-size: 16px;
 		outline: none;
-		flex-shrink: 0;
 	}
 	.sheet-search::placeholder { color: var(--text-faint); }
+	.sheet-search:focus { border-color: var(--text-muted); }
 
 	.sheet-list {
 		flex: 1;
@@ -267,30 +329,33 @@
 		padding-bottom: env(safe-area-inset-bottom, 16px);
 	}
 
-	:global(.sheet-item) {
+	.sheet-item {
 		display: flex;
-		justify-content: space-between;
-		align-items: center;
+		flex-direction: column;
+		gap: 2px;
 		width: 100%;
-		padding: 14px 16px;
+		padding: 12px 16px;
 		background: none;
 		border: none;
 		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 		color: var(--text-body);
 		font-family: var(--font-body);
-		font-size: 15px;
+		font-size: 14px;
 		cursor: pointer;
 		text-align: left;
 	}
-	:global(.sheet-item.selected) { color: var(--text); }
-	:global(.sheet-item:active) { background: rgba(255, 255, 255, 0.05); }
+	.sheet-item.selected { color: var(--text); }
+	.sheet-item:active { background: rgba(255, 255, 255, 0.05); }
 
-	.sheet-item-meta {
-		font-family: var(--font-mono);
-		font-size: 12px;
-		color: var(--text-muted);
+	.sheet-item-top {
 		display: flex;
 		align-items: center;
 		gap: 6px;
+	}
+
+	.sheet-item-meta {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--text-muted);
 	}
 </style>
