@@ -8,6 +8,8 @@ sources:
     authors: "Zheng et al., 2025"
 ---
 
-[GRPO](/optimization/grpo), but clip at the sequence level.
+Same idea as [GRPO](/optimization/grpo). Optimize the sequence, not the token.
 
-GRPO measures and constrains changes at every token. That's noisy: individual token probabilities fluctuate, especially in **mixture-of-experts** models where different experts activate for different tokens. GSPO moves the entire optimization to the sequence level. One measurement per output, one constraint, one reward. The signal is cleaner and more stable. The algorithm behind [Qwen3](https://qwenlm.github.io/blog/gspo/), where it stabilized MoE training that GRPO struggled with.
+GRPO measures and constrains how much the model can shift its probability for each individual token. That's noisy, especially in **mixture-of-experts** models where different experts activate for different tokens. GSPO moves the unit of optimization up to the full sequence: one probability ratio per output, one constraint. Cleaner signal, more stable training.
+
+Behind [Qwen3](https://qwenlm.github.io/blog/gspo/), where it stabilized MoE training that GRPO struggled with.

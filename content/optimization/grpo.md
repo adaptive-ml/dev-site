@@ -11,8 +11,10 @@ sources:
     authors: "Guo et al., 2025"
 ---
 
-Drop the critic. Use the group as the baseline.
+Generate a group. Reward what beats the average.
 
-[PPO](/optimization/ppo) needs a value function to estimate how good each state is. GRPO skips it. For each prompt, the model generates a group of outputs and scores them all. The **group mean** becomes the baseline: outputs above average get reinforced, below average get pushed down. No extra model to train, no extra memory.
+For each prompt, GRPO generates a group of outputs and scores them all. The **group mean** becomes the baseline: above-average outputs get reinforced, below-average ones pushed down. That's the whole algorithm.
 
-This is the algorithm behind [DeepSeek-R1](https://arxiv.org/abs/2501.12948), where pure RL (no [SFT](/training/post-training/sft) warmup) produced strong reasoning from scratch.
+The group serves as both the training signal and a local estimate of what "good" looks like on this prompt. Cheap on memory, simple to implement.
+
+Behind [DeepSeek-R1](https://arxiv.org/abs/2501.12948), where pure RL with no [SFT](/training/post-training/sft) warmup produced strong reasoning from scratch.
