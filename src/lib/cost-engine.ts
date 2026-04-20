@@ -3,7 +3,7 @@ import modelsJson from './generated/models.json';
 
 const HOURS_PER_MONTH = 730;
 const DAYS_PER_MONTH = 30;
-const DEFAULT_EFFICIENCY = 0.2;
+const DEFAULT_EFFICIENCY = 0.5;
 
 export interface GpuSpec {
 	id: string;
@@ -18,14 +18,15 @@ export interface GpuSpec {
 // Pricing: AWS, per-accelerator (instance price ÷ GPUs per node).
 // H100: p5.48xlarge capacity block $34.61/node-hr ÷ 8 = $4.33/GPU-hr.
 // H200: p5en.48xlarge capacity block $41.61/node-hr ÷ 8 = $5.20/GPU-hr.
-// L40S: g6e.xlarge on-demand $1.86/GPU-hr.
+// B200/B300: estimated from limited AWS capacity-block data as of April 2026; adjust as the market settles.
 export const PRIMARY_GPUS: GpuSpec[] = [
 	{ id: 'h100_sxm', name: 'H100 SXM', memoryGb: 80, bandwidthGbps: 3355, costPerHour: 4.33, provider: 'AWS', packSize: 8 },
 ];
 
 const OTHER_GPUS: GpuSpec[] = [
 	{ id: 'h200_sxm', name: 'H200 SXM', memoryGb: 141, bandwidthGbps: 4800, costPerHour: 5.20, provider: 'AWS', packSize: 8 },
-	{ id: 'l40s', name: 'L40S', memoryGb: 48, bandwidthGbps: 864, costPerHour: 1.86, provider: 'AWS', packSize: 4 },
+	{ id: 'b200', name: 'B200', memoryGb: 192, bandwidthGbps: 8000, costPerHour: 6.50, provider: 'AWS', packSize: 8 },
+	{ id: 'b300', name: 'B300', memoryGb: 288, bandwidthGbps: 8000, costPerHour: 8.00, provider: 'AWS', packSize: 8 },
 ];
 
 export const GPU_OPTIONS: GpuSpec[] = [...PRIMARY_GPUS, ...OTHER_GPUS];
@@ -41,10 +42,12 @@ type RegressionCoeffs = [number, number, number, number, number, number]; // [in
 const H100_FP8_COEFFS: RegressionCoeffs = [16.411857, -0.932287, -0.143557, -1.123021, -0.128617, 0.205752];
 const H200_FP8_COEFFS: RegressionCoeffs = [15.440810, -0.932397, -0.085639, -0.974486, -0.127381, 0.198576];
 
-// L40S: no TRT-LLM data. Scale from H100 by blended compute+bandwidth ratio.
-const H100_BANDWIDTH = 3355;
+// Blackwell: TRT-LLM v0.21 publishes B200 only in FP4, not FP8. Scale from H200 by
+// HBM bandwidth ratio (decode is memory-bound): B200/H200 = 8000/4800 ≈ 1.67.
+// B300 adds ~25% compute headroom from higher TDP and more enabled tensor cores.
 const GPU_SCALE_OVERRIDES: Record<string, number> = {
-	l40s: 0.37,
+	b200: 1.67,
+	b300: 2.08,
 };
 
 function regressionThroughput(paramsB: number, isl: number, osl: number, coeffs: RegressionCoeffs): number {
@@ -57,11 +60,12 @@ function regressionThroughput(paramsB: number, isl: number, osl: number, coeffs:
 
 // Output tok/s per GPU at FP8 peak (TRT-LLM infinite request rate).
 function estimatePeakThroughput(paramsB: number, isl: number, osl: number, gpu: GpuSpec = GPU_OPTIONS[0]): number {
-	if (gpu.id === 'h200_sxm') return regressionThroughput(paramsB, isl, osl, H200_FP8_COEFFS);
 	if (gpu.id === 'h100_sxm') return regressionThroughput(paramsB, isl, osl, H100_FP8_COEFFS);
-	const h100Base = regressionThroughput(paramsB, isl, osl, H100_FP8_COEFFS);
-	const scale = GPU_SCALE_OVERRIDES[gpu.id] ?? gpu.bandwidthGbps / H100_BANDWIDTH;
-	return Math.max(1, Math.round(h100Base * scale));
+	if (gpu.id === 'h200_sxm') return regressionThroughput(paramsB, isl, osl, H200_FP8_COEFFS);
+	const scale = GPU_SCALE_OVERRIDES[gpu.id];
+	if (scale === undefined) return regressionThroughput(paramsB, isl, osl, H100_FP8_COEFFS);
+	const h200Base = regressionThroughput(paramsB, isl, osl, H200_FP8_COEFFS);
+	return Math.max(1, Math.round(h200Base * scale));
 }
 
 export interface ApiModel {
@@ -118,6 +122,57 @@ export function formatUsd(n: number): string {
 	return `$${n.toFixed(6)}`;
 }
 
+interface SizeInputs {
+	activeParamsB: number;
+	totalParamsB: number;
+	isl: number;
+	osl: number;
+	monthlyTokens: number;
+	inputRatio: number;
+	precisionInfo: PrecisionInfo;
+	efficiency: number;
+}
+
+interface SizeResult {
+	gpusAuto: number;
+	outputThroughput: number;
+	modelMemoryGb: number;
+}
+
+function sizeForGpu(s: SizeInputs, gpu: GpuSpec): SizeResult {
+	const peakOutput = estimatePeakThroughput(s.activeParamsB, s.isl, s.osl, gpu);
+	const outputThroughput = Math.round(peakOutput * s.precisionInfo.throughputMultiplier);
+
+	const monthlyOutputTokens = s.monthlyTokens * (1 - s.inputRatio);
+	const outputTokPerSec = monthlyOutputTokens / (DAYS_PER_MONTH * 24 * 3600);
+	const effectivePerGpu = outputThroughput * Math.max(0.1, Math.min(1, s.efficiency));
+	const gpusForThroughput = Math.max(1, Math.ceil(outputTokPerSec / effectivePerGpu));
+
+	const modelMemoryGb = s.totalParamsB * s.precisionInfo.bytesPerParam;
+	const gpusForMemory = Math.max(1, Math.ceil(modelMemoryGb / gpu.memoryGb));
+
+	const gpusRaw = Math.max(gpusForThroughput, gpusForMemory);
+	const gpusAuto = Math.ceil(gpusRaw / gpu.packSize) * gpu.packSize;
+
+	return { gpusAuto, outputThroughput, modelMemoryGb };
+}
+
+export function selectOptimalGpu(inputs: Omit<CalcInputs, 'gpu' | 'gpuCountOverride' | 'apiModel'>): { gpu: GpuSpec; gpusAuto: number } {
+	const { activeParamsB, totalParamsB, monthlyTokens, inputRatio = 0.85, tokensPerCall = 4000, precision = 'fp8', efficiency = DEFAULT_EFFICIENCY } = inputs;
+	const precisionInfo = PRECISION_OPTIONS.find(p => p.id === precision) ?? PRECISION_OPTIONS[0];
+	const isl = Math.round(tokensPerCall * inputRatio);
+	const osl = Math.round(tokensPerCall * (1 - inputRatio));
+	const sizeInputs: SizeInputs = { activeParamsB, totalParamsB, isl, osl, monthlyTokens, inputRatio, precisionInfo, efficiency };
+
+	let best: { gpu: GpuSpec; gpusAuto: number; cost: number } | null = null;
+	for (const gpu of GPU_OPTIONS) {
+		const { gpusAuto } = sizeForGpu(sizeInputs, gpu);
+		const cost = gpusAuto * gpu.costPerHour * HOURS_PER_MONTH;
+		if (!best || cost < best.cost) best = { gpu, gpusAuto, cost };
+	}
+	return best ? { gpu: best.gpu, gpusAuto: best.gpusAuto } : { gpu: GPU_OPTIONS[0], gpusAuto: GPU_OPTIONS[0].packSize };
+}
+
 export function calculate(inputs: CalcInputs): CalcOutputs {
 	const { monthlyTokens, apiModel, activeParamsB, totalParamsB, inputRatio = 0.85, tokensPerCall = 4000, gpu = GPU_OPTIONS[0], gpuCountOverride = null, precision = 'fp8', efficiency = DEFAULT_EFFICIENCY } = inputs;
 
@@ -126,21 +181,16 @@ export function calculate(inputs: CalcInputs): CalcOutputs {
 	const blendedPer1M = apiModel.inputPer1M * inputRatio + apiModel.outputPer1M * (1 - inputRatio);
 	const monthlyApiCost = (monthlyTokens / 1_000_000) * blendedPer1M;
 
-	// Derive ISL/OSL from tokens per call and input ratio
 	const isl = Math.round(tokensPerCall * inputRatio);
 	const osl = Math.round(tokensPerCall * (1 - inputRatio));
 
-	// Regression gives FP8 peak output tok/s; precision multiplier adjusts
-	const peakOutput = estimatePeakThroughput(activeParamsB, isl, osl, gpu);
-	const outputThroughput = Math.round(peakOutput * precisionInfo.throughputMultiplier);
+	const sizeInputs: SizeInputs = { activeParamsB, totalParamsB, isl, osl, monthlyTokens, inputRatio, precisionInfo, efficiency };
+	const { gpusAuto, outputThroughput, modelMemoryGb } = sizeForGpu(sizeInputs, gpu);
 
-	// Capacity planning uses output tokens (TRT-LLM metric is output throughput)
+	const gpusUsed = gpuCountOverride ?? gpusAuto;
 	const monthlyOutputTokens = monthlyTokens * (1 - inputRatio);
 	const outputTokPerSec = monthlyOutputTokens / (DAYS_PER_MONTH * 24 * 3600);
 	const effectivePerGpu = outputThroughput * Math.max(0.1, Math.min(1, efficiency));
-	const gpusRaw = Math.max(1, Math.ceil(outputTokPerSec / effectivePerGpu));
-	const gpusAuto = Math.ceil(gpusRaw / gpu.packSize) * gpu.packSize;
-	const gpusUsed = gpuCountOverride ?? gpusAuto;
 	const effectiveCapacity = gpusUsed * effectivePerGpu;
 	const utilization = effectiveCapacity > 0 ? outputTokPerSec / effectiveCapacity : 0;
 
@@ -148,8 +198,7 @@ export function calculate(inputs: CalcInputs): CalcOutputs {
 	const monthlySelfHostedCost = gpusUsed * gpuMonthlyCost;
 
 	const annualSavings = (monthlyApiCost - monthlySelfHostedCost) * 12;
-	const modelMemoryGb = totalParamsB * precisionInfo.bytesPerParam;
-	const modelFitsGpu = modelMemoryGb <= gpu.memoryGb;
+	const modelFitsGpu = modelMemoryGb <= gpusUsed * gpu.memoryGb;
 
 	return {
 		monthlyTokens,

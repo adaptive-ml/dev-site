@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import symbolSvg from '$logos/symbol/symbol-white.svg?raw';
-	import { calculate, formatUsd, PRIMARY_MODELS, ALL_MODELS, GPU_OPTIONS, PRECISION_OPTIONS, MODEL_DATABASE, type ApiModel, type GpuSpec, type Precision, type ModelEntry } from '$lib/cost-engine';
+	import { calculate, selectOptimalGpu, formatUsd, PRIMARY_MODELS, ALL_MODELS, GPU_OPTIONS, PRECISION_OPTIONS, MODEL_DATABASE, type ApiModel, type GpuSpec, type Precision, type ModelEntry } from '$lib/cost-engine';
 	import CalcPlatform from './CalcPlatform.svelte';
 	import CalcSpecialistPicker from './CalcSpecialistPicker.svelte';
 
@@ -53,8 +53,7 @@
 
 	// Stamp defaults into URL when arriving at a step
 	$effect(() => {
-		if (step === 'workload' && !params.get('calls')) replaceParams({ calls: '10000000', tpc: '4000', tok: String(10000000 * 4000), ratio: '85' });
-		if (step === 'gpu' && !params.get('gpu')) replaceParams({ gpu: GPU_OPTIONS[0].id });
+		if (step === 'workload' && !params.get('calls')) replaceParams({ calls: '10000000', tpc: '4000', tok: String(10000000 * 4000), ratio: '85', eff: '45' });
 		if (step === 'gpu' && !params.get('prec')) replaceParams({ prec: 'fp8' });
 	});
 
@@ -82,7 +81,7 @@
 
 	const inputRatio = $derived(Number(params.get('ratio')) || 75);
 	const precision = $derived<Precision>((params.get('prec') as Precision) || 'fp8');
-	const efficiency = $derived(Number(params.get('eff')) || 20);
+	const efficiency = $derived(Number(params.get('eff')) || 50);
 	const selectedGpu = $derived(GPU_OPTIONS.find(g => g.id === params.get('gpu')) ?? GPU_OPTIONS[0]);
 	const gpuCountMode = $derived<'auto' | 'manual'>(params.get('gpus') ? 'manual' : 'auto');
 	const gpuCountManual = $derived(Number(params.get('gpus')) || 1);
@@ -112,16 +111,16 @@
 	$effect(() => { if (callsPerMonth > 0) callsSlider = callsToSlider(callsPerMonth); });
 
 	const TASK_PRESETS = [
-		{ label: 'classification', tpc: 500, ratio: 95 },
-		{ label: 'chat', tpc: 2000, ratio: 80 },
-		{ label: 'RAG', tpc: 4000, ratio: 85 },
-		{ label: 'summarization', tpc: 5000, ratio: 90 },
+		{ label: 'classification', tpc: 500, ratio: 95, eff: 60 },
+		{ label: 'chat', tpc: 2000, ratio: 80, eff: 35 },
+		{ label: 'RAG', tpc: 4000, ratio: 85, eff: 45 },
+		{ label: 'summarization', tpc: 5000, ratio: 90, eff: 50 },
 	] as const;
 	const activeTask = $derived(TASK_PRESETS.find(p => p.tpc === tokensPerCall && p.ratio === inputRatio) ?? null);
 
 	function selectTask(preset: typeof TASK_PRESETS[number]) {
 		const calls = callsPerMonth || 10000000;
-		replaceParams({ calls: String(calls), tpc: String(preset.tpc), tok: String(calls * preset.tpc), ratio: String(preset.ratio) });
+		replaceParams({ calls: String(calls), tpc: String(preset.tpc), tok: String(calls * preset.tpc), ratio: String(preset.ratio), eff: String(preset.eff) });
 	}
 
 	// Tokens per call: snap-point slider, 50 to 100K
@@ -169,6 +168,20 @@
 	const activeParamsB = $derived(activeSpecialist?.activeParamsB ?? 8);
 	const activeTotalParamsB = $derived(activeSpecialist?.totalParamsB ?? activeParamsB);
 	const activeSizeLabel = $derived(activeSpecialist?.name ?? '');
+
+	$effect(() => {
+		if (step !== 'gpu' || params.get('gpu') || !specialist) return;
+		const { gpu: optimal } = selectOptimalGpu({
+			monthlyTokens,
+			activeParamsB: specialist.activeParamsB,
+			totalParamsB: specialist.totalParamsB,
+			inputRatio: inputRatio / 100,
+			tokensPerCall: tokensPerCall || 4000,
+			precision,
+			efficiency: efficiency / 100,
+		});
+		replaceParams({ gpu: optimal.id });
+	});
 
 	// URL helpers
 	function pushParams(updates: Record<string, string>) {
@@ -597,10 +610,10 @@
 				<details class="calc-methodology">
 					<summary class="methodology-toggle">how is this calculated?</summary>
 					<div class="methodology-body">
-						<p>Throughput estimated from a regression fit to <a href="https://nvidia.github.io/TensorRT-LLM/performance/perf-overview.html" target="_blank" rel="noopener">NVIDIA TRT-LLM v0.21 benchmarks</a> (Llama 8B/70B/405B, FP8, H100 + H200). Predicts output tokens/sec per GPU as a function of model size, input length, and output length. Other precisions scale from the FP8 baseline. L40S scaled from H100 by a fixed ratio (no benchmark data).</p>
-						<p>The efficiency slider scales peak benchmark throughput down to account for production conditions. Benchmarks assume maximum concurrency with no latency constraints. The default is 20%.</p>
-						<p>GPU pricing from <a href="https://aws.amazon.com/ec2/capacityblocks/pricing/" target="_blank" rel="noopener">AWS</a>. H100/H200: capacity block rates. L40S: on-demand. API pricing from <a href="https://llm-prices.com" target="_blank" rel="noopener">llm-prices.com</a>.</p>
-						<p>GPU count sized on required output token throughput at the selected efficiency, rounded up to node pack sizes. Capacity planned on output tokens (the decode bottleneck), not total tokens.</p>
+						<p>Throughput estimated from a regression fit to <a href="https://nvidia.github.io/TensorRT-LLM/performance/perf-overview.html" target="_blank" rel="noopener">NVIDIA TRT-LLM v0.21 benchmarks</a> (Llama 8B/70B/405B, FP8, H100 + H200). Predicts output tokens/sec per GPU as a function of model size, input length, and output length. Other precisions scale from the FP8 baseline. B200 and B300 scaled from H200 by HBM bandwidth ratio (direct FP8 benchmarks not yet published).</p>
+						<p>The efficiency slider scales peak benchmark throughput down to account for production conditions. Benchmarks assume maximum concurrency with no latency constraints. Task-aware defaults: classification 60%, RAG 45%, chat 35%, summarization 50%. Free-form workloads default to 50%.</p>
+						<p>GPU pricing from <a href="https://aws.amazon.com/ec2/capacityblocks/pricing/" target="_blank" rel="noopener">AWS</a>. H100/H200: capacity block rates. B200 and B300 estimated from limited capacity-block data as of April 2026; adjust as the market settles. API pricing from <a href="https://llm-prices.com" target="_blank" rel="noopener">llm-prices.com</a>.</p>
+						<p>Default GPU auto-selected as the cheapest fleet option that fits memory and throughput. Override by clicking another card. Capacity planned on output tokens (the decode bottleneck) and rounded up to 8-GPU node pack sizes.</p>
 						<p>Self-hosted cost is GPU compute only. Does not include training, DevOps, networking, storage, or platform fees.</p>
 						<p><a href="https://github.com/adaptive-ml/dev-site/blob/main/src/lib/cost-engine.ts" target="_blank" rel="noopener">see the source code</a></p>
 					</div>
