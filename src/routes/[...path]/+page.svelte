@@ -11,7 +11,8 @@
 	const pageRefs = $derived(getPageRefs(data.segments.join('/')));
 	const pageUrl = $derived(`${ORIGIN}/${data.segments.join('/')}`);
 	const ogImage = $derived(`${ORIGIN}/og/${data.segments[0]}.png`);
-	const isInteractive = $derived(data.segments.join('/') === 'cost-calculator');
+	const interactivePages = new Set(['cost-calculator', 'training/post-training/rl']);
+	const isInteractive = $derived(interactivePages.has(data.segments.join('/')));
 
 	const breadcrumbLd = $derived({
 		"@context": "https://schema.org",
