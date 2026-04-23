@@ -13,6 +13,8 @@ const REPOS = [
 	'Qwen/Qwen3-235B-A22B',
 	'Qwen/Qwen3.5-35B-A3B',
 	'Qwen/Qwen3.5-397B-A17B',
+	'Qwen/Qwen3.6-27B',
+	'Qwen/Qwen3.6-35B-A3B',
 	'meta-llama/Llama-3.1-8B',
 	'meta-llama/Llama-3.3-70B-Instruct',
 	'meta-llama/Llama-4-Scout-17B-16E',
@@ -20,9 +22,11 @@ const REPOS = [
 	'google/gemma-3-4b-it',
 	'google/gemma-3-12b-it',
 	'google/gemma-3-27b-it',
+	'google/gemma-4-31B-it',
 	'mistralai/Mistral-Small-3.1-24B-Instruct-2503',
 	'deepseek-ai/DeepSeek-V3',
 	'deepseek-ai/DeepSeek-R1',
+	'moonshotai/Kimi-K2.6',
 ];
 
 // Display names and metadata that can't be derived from HF
@@ -37,6 +41,8 @@ const META: Record<string, { name?: string; suited?: string; primary?: boolean; 
 	'Qwen/Qwen3-235B-A22B': { suited: 'coding, reasoning' },
 	'Qwen/Qwen3.5-35B-A3B': { suited: 'lightweight MoE' },
 	'Qwen/Qwen3.5-397B-A17B': { suited: 'general-purpose, agents' },
+	'Qwen/Qwen3.6-27B': { suited: 'coding, reasoning' },
+	'Qwen/Qwen3.6-35B-A3B': { suited: 'lightweight MoE' },
 	'meta-llama/Llama-3.1-8B': { name: 'Llama 3.1 8B', primary: true, suited: 'chat, extraction' },
 	'meta-llama/Llama-3.3-70B-Instruct': { name: 'Llama 3.3 70B', primary: true, suited: 'frontier reasoning' },
 	// Scout: gated, no safetensors. Total from model card.
@@ -45,10 +51,13 @@ const META: Record<string, { name?: string; suited?: string; primary?: boolean; 
 	'google/gemma-3-4b-it': { name: 'Gemma 3 4B', suited: 'classification, extraction' },
 	'google/gemma-3-12b-it': { name: 'Gemma 3 12B', suited: 'summarization, coding' },
 	'google/gemma-3-27b-it': { name: 'Gemma 3 27B', primary: true, suited: 'agents, complex tasks' },
+	'google/gemma-4-31B-it': { name: 'Gemma 4 31B', suited: 'agents, complex tasks' },
 	'mistralai/Mistral-Small-3.1-24B-Instruct-2503': { name: 'Mistral Small 3.1 24B', suited: 'coding, multilingual' },
 	// DeepSeek: config estimate includes shared experts; 37B active per paper
 	'deepseek-ai/DeepSeek-V3': { name: 'DeepSeek V3', suited: 'frontier reasoning', activeParamsB: 37 },
 	'deepseek-ai/DeepSeek-R1': { name: 'DeepSeek R1', suited: 'deep reasoning', activeParamsB: 37 },
+	// Kimi K2.x: ~1T MoE, 32B active per Moonshot paper. custom model_type not recognized by config parser.
+	'moonshotai/Kimi-K2.6': { name: 'Kimi K2.6', suited: 'frontier MoE', totalParamsB: 1058, activeParamsB: 32 },
 };
 
 function repoToVendor(repo: string): string {
@@ -163,7 +172,7 @@ async function resolveModel(repo: string): Promise<ModelResult> {
 		const ac = apiData.config as Config | undefined;
 		if (ac) {
 			const mt = String(ac.model_type ?? '');
-			if (mt.includes('moe') || mt === 'llama4' || mt === 'deepseek_v3') isMoE = true;
+			if (mt.includes('moe') || mt === 'llama4' || mt === 'deepseek_v3' || mt.startsWith('kimi_k2')) isMoE = true;
 		}
 	}
 

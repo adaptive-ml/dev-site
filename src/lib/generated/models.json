@@ -91,6 +91,24 @@
 		"suited": "general-purpose, agents"
 	},
 	{
+		"name": "Qwen3.6 27B",
+		"vendor": "qwen",
+		"activeParamsB": 27.8,
+		"totalParamsB": 27.8,
+		"isMoE": false,
+		"url": "https://huggingface.co/Qwen/Qwen3.6-27B",
+		"suited": "coding, reasoning"
+	},
+	{
+		"name": "Qwen3.6 35B A3B",
+		"vendor": "qwen",
+		"activeParamsB": 3,
+		"totalParamsB": 36,
+		"isMoE": true,
+		"url": "https://huggingface.co/Qwen/Qwen3.6-35B-A3B",
+		"suited": "lightweight MoE"
+	},
+	{
 		"name": "Llama 3.1 8B",
 		"vendor": "meta",
 		"activeParamsB": 8,
@@ -157,6 +175,15 @@
 		"suited": "agents, complex tasks"
 	},
 	{
+		"name": "Gemma 4 31B",
+		"vendor": "google",
+		"activeParamsB": 32.7,
+		"totalParamsB": 32.7,
+		"isMoE": false,
+		"url": "https://huggingface.co/google/gemma-4-31B-it",
+		"suited": "agents, complex tasks"
+	},
+	{
 		"name": "Mistral Small 3.1 24B",
 		"vendor": "mistral",
 		"activeParamsB": 24,
@@ -182,5 +209,14 @@
 		"isMoE": true,
 		"url": "https://huggingface.co/deepseek-ai/DeepSeek-R1",
 		"suited": "deep reasoning"
+	},
+	{
+		"name": "Kimi K2.6",
+		"vendor": "moonshotai",
+		"activeParamsB": 32,
+		"totalParamsB": 1058,
+		"isMoE": true,
+		"url": "https://huggingface.co/moonshotai/Kimi-K2.6",
+		"suited": "frontier MoE"
 	}
 ]

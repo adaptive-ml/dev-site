@@ -1,19 +1,19 @@
 {
 	"_source": "https://www.llm-prices.com/current-v1.json",
-	"_fetched": "2026-04-09",
+	"_fetched": "2026-04-23",
 	"primary": [
 		{
-			"id": "gpt-5",
+			"id": "gpt-5.4",
 			"vendor": "openai",
-			"name": "GPT-5",
-			"input": 1.25,
-			"output": 10,
-			"input_cached": 0.125
+			"name": "GPT-5.4",
+			"input": 2.5,
+			"output": 15,
+			"input_cached": 0.25
 		},
 		{
-			"id": "claude-sonnet-4.5",
+			"id": "claude-sonnet-4.6",
 			"vendor": "anthropic",
-			"name": "Claude Sonnet 4.5",
+			"name": "Claude Sonnet 4.6",
 			"input": 3,
 			"output": 15,
 			"input_cached": null
@@ -29,36 +29,28 @@
 	],
 	"other": [
 		{
-			"id": "gpt-4.1",
+			"id": "gpt-5.4-mini",
 			"vendor": "openai",
-			"name": "GPT-4.1",
-			"input": 2,
-			"output": 8,
-			"input_cached": 0.5
+			"name": "GPT-5.4 Mini",
+			"input": 0.75,
+			"output": 4.5,
+			"input_cached": 0.075
 		},
 		{
-			"id": "claude-opus-4-5",
+			"id": "claude-opus-4.7",
 			"vendor": "anthropic",
-			"name": "Claude Opus 4.5",
+			"name": "Claude Opus 4.7",
 			"input": 5,
 			"output": 25,
 			"input_cached": null
 		},
 		{
-			"id": "claude-4.5-haiku",
+			"id": "claude-haiku-4.5",
 			"vendor": "anthropic",
 			"name": "Claude Haiku 4.5",
 			"input": 1,
 			"output": 5,
 			"input_cached": null
-		},
-		{
-			"id": "gpt-4.1-mini",
-			"vendor": "openai",
-			"name": "GPT-4.1 Mini",
-			"input": 0.4,
-			"output": 1.6,
-			"input_cached": 0.1
 		},
 		{
 			"id": "gemini-2.5-flash",
@@ -67,6 +59,14 @@
 			"input": 0.3,
 			"output": 2.5,
 			"input_cached": 0.03
+		},
+		{
+			"id": "grok-4-fast",
+			"vendor": "xai",
+			"name": "Grok 4 Fast",
+			"input": 0.2,
+			"output": 0.5,
+			"input_cached": 0.05
 		}
 	]
 }

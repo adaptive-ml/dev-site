@@ -1,19 +1,27 @@
 const PRICES_URL = 'https://www.llm-prices.com/current-v1.json';
 
-// llm-prices ID → display name
-const PRIMARY: [string, string][] = [
-	['gpt-5', 'GPT-5'],
-	['claude-sonnet-4.5', 'Claude Sonnet 4.5'],
-	['gemini-2.5-pro', 'Gemini 2.5 Pro'],
+// `priceFromId`: use when a new model ships at the same price as an older one and
+// llm-prices hasn't indexed the new ID yet. The vendor release must be verified to
+// have unchanged pricing (check vendor docs before setting). Display uses `id` + `name`;
+// price lookup uses `priceFromId`.
+interface Pick {
+	id: string;
+	name: string;
+	priceFromId?: string;
+}
+
+const PRIMARY: Pick[] = [
+	{ id: 'gpt-5.4', name: 'GPT-5.4' },
+	{ id: 'claude-sonnet-4.6', name: 'Claude Sonnet 4.6', priceFromId: 'claude-sonnet-4.5' },
+	{ id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
 ];
-const OTHER: [string, string][] = [
-	['gpt-4.1', 'GPT-4.1'],
-	['claude-opus-4-5', 'Claude Opus 4.5'],
-	['claude-4.5-haiku', 'Claude Haiku 4.5'],
-	['gpt-4.1-mini', 'GPT-4.1 Mini'],
-	['gemini-2.5-flash', 'Gemini 2.5 Flash'],
+const OTHER: Pick[] = [
+	{ id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini' },
+	{ id: 'claude-opus-4.7', name: 'Claude Opus 4.7', priceFromId: 'claude-opus-4-5' },
+	{ id: 'claude-haiku-4.5', name: 'Claude Haiku 4.5', priceFromId: 'claude-4.5-haiku' },
+	{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+	{ id: 'grok-4-fast', name: 'Grok 4 Fast' },
 ];
-const ALL_IDS = new Set([...PRIMARY, ...OTHER].map(([id]) => id));
 
 interface LlmPrice {
 	id: string;
@@ -30,17 +38,23 @@ const json: { prices: LlmPrice[] } = await res.json();
 const data = json.prices;
 
 const lookup = new Map(data.map((m) => [m.id, m]));
-const missing = [...ALL_IDS].filter((id) => !lookup.has(id));
+const picks = [...PRIMARY, ...OTHER];
+const missing = picks.filter((p) => !lookup.has(p.priceFromId ?? p.id));
 if (missing.length) {
-	console.error(`missing models in llm-prices: ${missing.join(', ')}`);
+	console.error(`missing in llm-prices: ${missing.map((p) => p.priceFromId ?? p.id).join(', ')}`);
 	process.exit(1);
+}
+
+function resolve(p: Pick): LlmPrice {
+	const price = lookup.get(p.priceFromId ?? p.id)!;
+	return { ...price, id: p.id, name: p.name };
 }
 
 const out = {
 	_source: PRICES_URL,
 	_fetched: new Date().toISOString().slice(0, 10),
-	primary: PRIMARY.map(([id, name]) => ({ ...lookup.get(id)!, name })),
-	other: OTHER.map(([id, name]) => ({ ...lookup.get(id)!, name })),
+	primary: PRIMARY.map(resolve),
+	other: OTHER.map(resolve),
 };
 
 await Bun.write('src/lib/generated/api-prices.json', JSON.stringify(out, null, '\t') + '\n');
