@@ -1,6 +1,9 @@
 import sharp from 'sharp';
 import { mkdirSync } from 'fs';
 
+// Generates monochrome category OG images at static/og/*.png.
+// The cost-calculator is a handcrafted screenshot of its report page;
+// see .playwright/og-calc.js to regenerate.
 const categories = [
 	{ slug: 'start', title: 'What is this?' },
 	{ slug: 'training', title: 'Training' },
