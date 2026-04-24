@@ -1,23 +1,26 @@
 <script lang="ts">
-	import logoWhite from '$logos/full/adaptive-logo-white.svg?raw';
-	import logoBlack from '$logos/full/adaptive-logo-black.svg?raw';
+	import logo from '$logos/full/adaptive-logo-white.svg?raw';
 
-	let { color = 'white', height = 24 }: { color?: 'white' | 'black'; height?: number } = $props();
-	const svg = $derived(color === 'white' ? logoWhite : logoBlack);
+	let { height = 24 }: { height?: number } = $props();
 </script>
 
 <span class="logo" style="height: {height}px;" aria-label="Adaptive ML">
-	{@html svg}
+	{@html logo}
 </span>
 
 <style>
 	.logo {
 		display: inline-flex;
 		align-items: center;
+		color: var(--text);
 	}
 
 	.logo :global(svg) {
 		height: 100%;
 		width: auto;
+	}
+
+	.logo :global(svg path) {
+		fill: currentColor;
 	}
 </style>

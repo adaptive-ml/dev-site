@@ -135,7 +135,7 @@
 			</button>
 			<span class="menu-rule"></span>
 			<a href="https://adaptive-ml.com" class="logo-link" aria-label="Adaptive ML">
-				<AdaptiveLogo color={$theme === 'light' ? 'black' : 'white'} height={18} />
+				<AdaptiveLogo height={18} />
 			</a>
 			<span class="header-rule"></span>
 			<a href={resolve('/')} class="header-title">RL Glossary</a>
