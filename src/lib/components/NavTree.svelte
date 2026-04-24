@@ -414,7 +414,7 @@
 
 	.link.active .abbr {
 		color: var(--void);
-		border-color: rgba(0, 0, 0, 0.2);
+		border-color: var(--inverted-border);
 	}
 
 	/* ---- toggle indicator (inside link) ---- */

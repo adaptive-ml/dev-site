@@ -166,7 +166,7 @@
 		align-items: center;
 		width: 100%;
 		padding: 12px 14px;
-		background: rgba(10, 10, 12, 0.8);
+		background: var(--material);
 		border: 1px solid var(--rule);
 		border-radius: 6px;
 		color: var(--text-body);
@@ -193,7 +193,7 @@
 	:global(.combo-input) {
 		width: 100%;
 		padding: 10px 12px;
-		background: rgba(10, 10, 12, 0.8);
+		background: var(--material);
 		border: 1px solid var(--rule);
 		border-radius: 6px;
 		color: var(--text-body);
@@ -220,7 +220,7 @@
 
 	/* === Desktop dropdown === */
 	:global(.combo-dropdown) {
-		background: rgba(10, 10, 12, 0.95);
+		background: var(--material-strong);
 		border: 1px solid var(--rule);
 		border-top: none;
 		border-radius: 0 0 6px 6px;
@@ -246,7 +246,7 @@
 	}
 	:global(.combo-item:hover),
 	:global(.combo-item[data-highlighted]) {
-		background: rgba(255, 255, 255, 0.05);
+		background: var(--hover-fill);
 	}
 	:global(.combo-item.selected) { color: var(--text); }
 
@@ -270,7 +270,7 @@
 	.sheet-backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.6);
+		background: var(--overlay);
 		z-index: 100;
 	}
 
@@ -280,7 +280,7 @@
 		left: 0;
 		right: 0;
 		z-index: 101;
-		background: rgba(10, 10, 12, 0.95);
+		background: var(--material-strong);
 		border-top: 1px solid var(--rule);
 		border-radius: 12px 12px 0 0;
 		display: flex;
@@ -311,7 +311,7 @@
 	.sheet-search {
 		width: 100%;
 		padding: 10px 12px;
-		background: rgba(255, 255, 255, 0.06);
+		background: var(--hover-fill-strong);
 		border: 1px solid var(--rule);
 		border-radius: 8px;
 		color: var(--text-body);
@@ -337,7 +337,7 @@
 		padding: 12px 16px;
 		background: none;
 		border: none;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+		border-bottom: 1px solid var(--rule);
 		color: var(--text-body);
 		font-family: var(--font-body);
 		font-size: 14px;
@@ -345,7 +345,7 @@
 		text-align: left;
 	}
 	.sheet-item.selected { color: var(--text); }
-	.sheet-item:active { background: rgba(255, 255, 255, 0.05); }
+	.sheet-item:active { background: var(--hover-fill); }
 
 	.sheet-item-top {
 		display: flex;

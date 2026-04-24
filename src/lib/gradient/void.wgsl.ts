@@ -50,6 +50,10 @@ struct VoidUniforms {
     textureOpacity: f32,
     domRectCount: u32,
     intensity: f32,
+    lightMode: u32,
+    _pad0: u32,
+    _pad1: u32,
+    _pad2: u32,
     domRects: array<DomRect, MAX_DOM_RECTS>,
     shapes: array<ShapeData, MAX_SHAPES>,
 }
@@ -226,7 +230,11 @@ fn fs(input: VertexOutput) -> @location(0) vec4f {
     let noise = generateTexture(input.uv);
     let edgeMod = edge * (1.0 + (noise * 4.0 - 0.5));
 
-    return vec4f(vec3f(max(grain, max(edgeMod, 0.0))), 1.0);
+    let value = max(grain, max(edgeMod, 0.0));
+    if (uniforms.lightMode > 0u) {
+        return vec4f(vec3f(1.0 - value), 1.0);
+    }
+    return vec4f(vec3f(value), 1.0);
 }
 `;
 }

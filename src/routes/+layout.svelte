@@ -1,18 +1,23 @@
 <script lang="ts">
 	import '../app.css';
+	import { onMount } from 'svelte';
 	import AdaptiveLogo from '$lib/components/AdaptiveLogo.svelte';
 	import NavTree from '$lib/components/NavTree.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import ReferencePopup from '$lib/components/ReferencePopup.svelte';
 	import GradientCanvas from '$lib/components/GradientCanvas.svelte';
+	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import geistLatinUrl from '@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url';
 	import geistMonoLatinUrl from '@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2?url';
 	import type { DomRectData } from '$lib/gradient';
 	import { navKey } from '$lib/nav';
 	import { getAdjacentEntries, getNode } from '$lib/data';
+	import { theme, initTheme } from '$lib/theme';
 	import { page } from '$app/stores';
 	import { goto, afterNavigate } from '$app/navigation';
 	import { resolve } from '$app/paths';
+
+	onMount(initTheme);
 
 	let { children } = $props();
 
@@ -110,7 +115,7 @@
 
 <div class="frame">
 	<div class="gradient-layer">
-		<GradientCanvas seed="rl-field-guide" {domRects} {register} bind:active={gradientActive} />
+		<GradientCanvas seed="rl-field-guide" {domRects} {register} theme={$theme} bind:active={gradientActive} />
 	</div>
 	<header>
 		<div class="header-left">
@@ -130,12 +135,15 @@
 			</button>
 			<span class="menu-rule"></span>
 			<a href="https://adaptive-ml.com" class="logo-link" aria-label="Adaptive ML">
-				<AdaptiveLogo color="white" height={18} />
+				<AdaptiveLogo color={$theme === 'light' ? 'black' : 'white'} height={18} />
 			</a>
 			<span class="header-rule"></span>
 			<a href={resolve('/')} class="header-title">RL Glossary</a>
 		</div>
-		<a href="https://www.adaptive-ml.com/contact-us" class="header-cta">Contact</a>
+		<div class="header-right">
+			<ThemeToggle />
+			<a href="https://www.adaptive-ml.com/contact-us" class="header-cta">Contact</a>
+		</div>
 	</header>
 
 	<div class="body">
@@ -221,6 +229,12 @@
 		display: flex;
 		align-items: center;
 		gap: 16px;
+	}
+
+	.header-right {
+		display: flex;
+		align-items: center;
+		gap: 12px;
 	}
 
 	.logo-link {

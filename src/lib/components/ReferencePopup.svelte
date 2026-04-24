@@ -116,7 +116,7 @@
 		position: fixed;
 		inset: 0;
 		z-index: 100;
-		background: rgba(0, 0, 0, 0.7);
+		background: var(--overlay);
 		display: flex;
 		align-items: flex-start;
 		justify-content: center;
@@ -145,14 +145,14 @@
 		max-height: min(520px, 65vh);
 		display: flex;
 		flex-direction: column;
-		background: rgba(10, 10, 12, 0.95);
+		background: var(--material-strong);
 		border: 1px solid var(--rule);
 		border-radius: 12px;
 		overflow: hidden;
 		animation: slideIn 150ms cubic-bezier(0.16, 1, 0.3, 1);
 		box-shadow:
-			0 0 0 1px rgba(255, 255, 255, 0.06),
-			0 16px 70px rgba(0, 0, 0, 0.6);
+			0 0 0 1px var(--shadow-ring),
+			0 16px 70px var(--shadow-drop);
 	}
 
 	.panel-header {
@@ -189,7 +189,7 @@
 	}
 
 	.ref-row.active {
-		background: rgba(255, 255, 255, 0.05);
+		background: var(--hover-fill);
 	}
 
 	.ref-header {

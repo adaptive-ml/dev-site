@@ -7,6 +7,7 @@
 		class: className = '',
 		domRects = [] as DomRectData[],
 		register = 0,
+		theme = 'dark' as 'dark' | 'light',
 		active = $bindable(false),
 		gpuElapsed = $bindable(-1),
 	}: {
@@ -14,6 +15,7 @@
 		class?: string;
 		domRects?: DomRectData[];
 		register?: number;
+		theme?: 'dark' | 'light';
 		active?: boolean;
 		gpuElapsed?: number;
 	} = $props();
@@ -53,12 +55,14 @@
 		canvas.style.height = rect.height + 'px';
 
 		gradient = new Gradient(canvas, { seed });
+		gradient.setTheme(theme);
 		gradient.start().then(() => {
 			active = !gradient!.error;
 			gpuElapsed = gradient!.elapsed;
 			resize();
 			gradient!.setDomRects(domRects);
 			gradient!.setRegister(register);
+			gradient!.setTheme(theme);
 		});
 
 		const observer = new ResizeObserver(resize);
@@ -79,6 +83,12 @@
 	$effect(() => {
 		if (gradient) {
 			gradient.setRegister(register);
+		}
+	});
+
+	$effect(() => {
+		if (gradient) {
+			gradient.setTheme(theme);
 		}
 	});
 

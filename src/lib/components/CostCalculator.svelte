@@ -1018,7 +1018,7 @@
 		align-items: baseline;
 		justify-content: space-between;
 		padding: 12px 14px;
-		background: rgba(10, 10, 12, 0.8);
+		background: var(--material);
 		border: 1px solid var(--rule);
 		border-radius: 6px;
 	}
@@ -1154,7 +1154,7 @@
 		flex-direction: column;
 		gap: 8px;
 		padding: 14px;
-		background: rgba(10, 10, 12, 0.8);
+		background: var(--material);
 		border: 1px solid var(--rule);
 		border-radius: 4px;
 	}
@@ -1281,7 +1281,7 @@
 
 	.util-bar {
 		height: 4px;
-		background: rgba(255, 255, 255, 0.1);
+		background: var(--hover-fill-strong);
 		border-radius: 2px;
 		overflow: hidden;
 	}
@@ -1497,10 +1497,14 @@
 	.cta-icon {
 		display: flex;
 		flex-shrink: 0;
+		color: var(--text);
 	}
 	.cta-icon :global(svg) {
 		width: 16px;
 		height: 16px;
+	}
+	.cta-icon :global(svg path) {
+		fill: currentColor;
 	}
 	.cta-text {
 		flex: 1;
@@ -1533,7 +1537,7 @@
 	.methodology-body {
 		margin-top: 8px;
 		padding: 12px;
-		background: rgba(10, 10, 12, 0.8);
+		background: var(--material);
 		border-radius: 8px;
 		font-size: 12px;
 		line-height: 1.6;

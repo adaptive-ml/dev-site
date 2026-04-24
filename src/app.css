@@ -13,11 +13,42 @@
 	--rule: rgba(255, 255, 255, 0.30);
 	--rule-strong: rgba(255, 255, 255, 0.45);
 
+	--material: rgba(10, 10, 12, 0.8);
+	--material-strong: rgba(10, 10, 12, 0.95);
+	--overlay: rgba(0, 0, 0, 0.7);
+	--hover-fill: rgba(255, 255, 255, 0.05);
+	--hover-fill-strong: rgba(255, 255, 255, 0.08);
+	--inverted-border: rgba(0, 0, 0, 0.2);
+	--shadow-ring: rgba(255, 255, 255, 0.06);
+	--shadow-drop: rgba(0, 0, 0, 0.6);
+
 	--font-body: 'Geist Variable', system-ui, -apple-system, sans-serif;
 	--font-mono: 'Geist Mono Variable', monospace;
 
 	--header-h: 64px;
 	--nav-w: 440px;
+}
+
+:root[data-theme='light'] {
+	--void: #ffffff;
+
+	--text: #0f0f0f;
+	--text-body: #262626;
+	--text-dim: #4d4d4d;
+	--text-muted: #595959;
+	--text-faint: #8c8c8c;
+
+	--rule: rgba(0, 0, 0, 0.15);
+	--rule-strong: rgba(0, 0, 0, 0.25);
+
+	--material: rgba(245, 245, 247, 0.8);
+	--material-strong: rgba(245, 245, 247, 0.95);
+	--overlay: rgba(0, 0, 0, 0.25);
+	--hover-fill: rgba(0, 0, 0, 0.04);
+	--hover-fill-strong: rgba(0, 0, 0, 0.06);
+	--inverted-border: rgba(255, 255, 255, 0.25);
+	--shadow-ring: rgba(0, 0, 0, 0.06);
+	--shadow-drop: rgba(0, 0, 0, 0.12);
 }
 
 *,

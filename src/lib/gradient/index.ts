@@ -85,7 +85,9 @@ const VOID_SHAPES = [
 ];
 const VOID_SHAPE_FLOATS = 4;
 const VOID_DOM_RECT_COUNT_INDEX = 14;
-const VOID_DOM_RECTS_OFFSET = 16;
+const VOID_LIGHT_MODE_INDEX = 16;
+// keep domRects array 16-byte aligned: 16 scalars header + 4 scalars (lightMode + 3 pad words) = 20
+const VOID_DOM_RECTS_OFFSET = 20;
 const VOID_SHAPES_OFFSET = VOID_DOM_RECTS_OFFSET + MAX_DOM_RECTS * DOM_RECT_FLOATS;
 const BUFFER_SIZE = (VOID_SHAPES_OFFSET + MAX_SHAPES * VOID_SHAPE_FLOATS) * 4;
 
@@ -422,6 +424,7 @@ export class Gradient {
 	private _register = 0;
 	private _targetRegister = 0;
 	private bubbleRadius = 0;
+	private _lightMode = 0;
 
 	constructor(canvas: HTMLCanvasElement, options: { seed?: string } = {}) {
 		this.canvas = canvas;
@@ -462,6 +465,7 @@ export class Gradient {
 		uniformData[13] = TEXTURE.opacity;
 		u32View[VOID_DOM_RECT_COUNT_INDEX] = 0;
 		uniformData[15] = 0.0;
+		u32View[VOID_LIGHT_MODE_INDEX] = this._lightMode;
 	}
 
 	async start(): Promise<void> {
@@ -562,6 +566,7 @@ export class Gradient {
 
 		uniformData[2] = elapsed;
 		uniformData[15] = this._register;
+		this.u32View![VOID_LIGHT_MODE_INDEX] = this._lightMode;
 		for (let i = 0; i < this.bubbles.length; i++) {
 			const shape = VOID_SHAPES[i];
 			const offset = VOID_SHAPES_OFFSET + i * VOID_SHAPE_FLOATS;
@@ -573,13 +578,14 @@ export class Gradient {
 
 		device.queue.writeBuffer(uniformBuffer, 0, uniformData as Float32Array<ArrayBuffer>);
 
+		const clear = this._lightMode ? 1 : 0;
 		const encoder = device.createCommandEncoder();
 		const pass = encoder.beginRenderPass({
 			colorAttachments: [{
 				view: context.getCurrentTexture().createView(),
 				loadOp: 'clear',
 				storeOp: 'store',
-				clearValue: { r: 0, g: 0, b: 0, a: 1 },
+				clearValue: { r: clear, g: clear, b: clear, a: 1 },
 			}],
 		});
 		pass.setPipeline(pipeline);
@@ -646,6 +652,10 @@ export class Gradient {
 
 	setRegister(value: number): void {
 		this._targetRegister = clamp(value, 0, 1);
+	}
+
+	setTheme(theme: 'dark' | 'light'): void {
+		this._lightMode = theme === 'light' ? 1 : 0;
 	}
 
 	destroy(): void {

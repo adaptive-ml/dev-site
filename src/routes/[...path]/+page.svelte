@@ -318,11 +318,16 @@
 	.cta-symbol {
 		display: flex;
 		flex-shrink: 0;
+		color: var(--text);
 	}
 
 	.cta-symbol :global(svg) {
 		width: 16px;
 		height: 16px;
+	}
+
+	.cta-symbol :global(svg path) {
+		fill: currentColor;
 	}
 
 	.cta-headline {

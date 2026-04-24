@@ -80,8 +80,8 @@
 	}
 
 	.splash :global(path) {
-		fill: rgba(255, 255, 255, 0.04);
-		stroke: white;
+		fill: color-mix(in srgb, var(--text) 4%, transparent);
+		stroke: var(--text);
 		stroke-width: 1.5;
 		opacity: 0;
 		transform-origin: center;

@@ -177,7 +177,7 @@
 		position: fixed;
 		inset: 0;
 		z-index: 100;
-		background: rgba(0, 0, 0, 0.7);
+		background: var(--overlay);
 		display: flex;
 		align-items: flex-start;
 		justify-content: center;
@@ -206,14 +206,14 @@
 		max-height: min(480px, 60vh);
 		display: flex;
 		flex-direction: column;
-		background: rgba(10, 10, 12, 0.95);
+		background: var(--material-strong);
 		border: 1px solid var(--rule);
 		border-radius: 12px;
 		overflow: hidden;
 		animation: slideIn 150ms cubic-bezier(0.16, 1, 0.3, 1);
 		box-shadow:
-			0 0 0 1px rgba(255, 255, 255, 0.06),
-			0 16px 70px rgba(0, 0, 0, 0.6);
+			0 0 0 1px var(--shadow-ring),
+			0 16px 70px var(--shadow-drop);
 	}
 
 	.input-row {
@@ -281,7 +281,7 @@
 	}
 
 	.result.selected {
-		background: rgba(255, 255, 255, 0.08);
+		background: var(--hover-fill-strong);
 	}
 
 	.result.selected .result-title {
