@@ -37,7 +37,7 @@
 
     const STEPS: StepState[] = [
         {
-            text: 'We have a <a href="/training/llm">model</a> tasked with naming paint colors.',
+            text: 'We have a <a href="https://dev.adaptive-ml.com/training/llm">model</a> tasked with naming paint colors.',
             columns: [{ modelId: "base" }],
         },
         {
@@ -49,11 +49,11 @@
             columns: [{ modelId: "base" }, { modelId: "poet" }],
         },
         {
-            text: 'We need to define a <a href="/rewards">reward</a>, which tells the model whether its response is good or bad.',
+            text: 'We need to define a <a href="https://dev.adaptive-ml.com/rewards">reward</a>, which tells the model whether its response is good or bad.',
             columns: [{ modelId: "base" }, { modelId: "poet", rollouts: [{ text: color.names.base, reward: 0.5 }] }],
         },
         {
-            text: 'A reward can come from anywhere. In this case, we\'ll use <a href="/evaluation/llm-as-judge">AI Judges</a>. These are larger models that assign a reward.',
+            text: 'A reward can come from anywhere. In this case, we\'ll use <a href="https://dev.adaptive-ml.com/evaluation/llm-as-judge">AI Judges</a>. These are larger models that assign a reward.',
             columns: [{ modelId: "base" }, { modelId: "poet" }],
             judges: [{ id: "correctness" }, { id: "poet" }],
         },
@@ -88,7 +88,7 @@
             groupAvg: avg,
         },
         {
-            text: 'Reinforce the model to generate above-average responses. This technique of comparing to the group average is called <a href="/optimization/grpo">GRPO</a>.',
+            text: 'Reinforce the model to generate above-average responses. This technique of comparing to the group average is called <a href="https://dev.adaptive-ml.com/optimization/grpo">GRPO</a>.',
             columns: [
                 { modelId: "base" },
                 {
@@ -121,7 +121,7 @@
             judges: [{ id: "architect" }, { id: "poet" }, { id: "unhinged" }],
         },
         {
-            text: 'Try any color. See how each model names it. You may notice the trained models collapse to fewer colors. This is called <a href="/rewards/reward-hacking">reward hacking</a>, and can be addressed with techniques like <a href="/data/synthetic-data">synthetic data generation</a>, <a href="/rewards/rlvr">verifiable rewards</a>, and <a href="/optimization/rejection-sampling">rejection sampling</a>. Explore the glossary to learn more.',
+            text: 'Try any color. See how each model names it. You may notice the trained models collapse to fewer colors. This is called <a href="https://dev.adaptive-ml.com/rewards/reward-hacking">reward hacking</a>, and can be addressed with techniques like <a href="https://dev.adaptive-ml.com/data/synthetic-data">synthetic data generation</a>, <a href="https://dev.adaptive-ml.com/rewards/rlvr">verifiable rewards</a>, and <a href="https://dev.adaptive-ml.com/optimization/rejection-sampling">rejection sampling</a>. Explore the <a href="https://dev.adaptive-ml.com">RL Glossary</a> to learn more.',
             columns: [],
             interactive: true,
         },
@@ -584,20 +584,12 @@
         background: var(--material);
         border: 1px solid var(--rule);
         border-radius: 4px;
-        transition:
-            border-radius 220ms ease,
-            border-color 150ms ease;
         z-index: 1;
         animation: bubble-in 320ms cubic-bezier(0.22, 1.35, 0.36, 1) backwards;
     }
 
     .bubble.compact {
         padding: 8px 14px;
-    }
-
-    .bubble:hover {
-        border-radius: 14px;
-        border-color: var(--rule-strong);
     }
 
     @keyframes bubble-in {

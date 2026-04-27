@@ -271,14 +271,6 @@
         background: var(--material);
         border: 1px solid var(--rule);
         border-radius: 4px;
-        transition:
-            border-radius 220ms ease,
-            border-color 150ms ease;
-    }
-
-    .result-card:hover {
-        border-radius: 14px;
-        border-color: var(--rule-strong);
     }
 
     .result-text {
