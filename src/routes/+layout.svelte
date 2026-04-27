@@ -44,6 +44,7 @@
 	const adjacent = $derived(getAdjacentEntries(routePath));
 	const register = $derived(routePath === '/' ? 0.35 : 0.07);
 	const isHome = $derived(routePath === '/');
+	const isEmbed = $derived(routePath.startsWith('/embed'));
 	const currentNode = $derived.by(() => {
 		if (isHome) return null;
 		const segments = routePath.replace(/^\//, '').split('/');
@@ -113,6 +114,11 @@
 
 <svelte:window onkeydown={handleKeydown} bind:innerWidth bind:innerHeight />
 
+{#if isEmbed}
+	<div class="embed-frame">
+		{@render children()}
+	</div>
+{:else}
 <div class="frame">
 	<div class="gradient-layer">
 		<GradientCanvas seed="rl-field-guide" {domRects} {register} theme={$theme} bind:active={gradientActive} />
@@ -197,8 +203,18 @@
 	<CommandPalette bind:open={paletteOpen} />
 	<ReferencePopup />
 </div>
+{/if}
 
 <style>
+	.embed-frame {
+		position: fixed;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		background: var(--void);
+	}
+
 	.frame {
 		position: fixed;
 		inset: 0;
