@@ -7,8 +7,12 @@
 		<script>
 			(function () {
 				try {
+					var params = new URLSearchParams(window.location.search);
+					var override = params.get('theme');
 					var stored = localStorage.getItem('rl-glossary-theme');
-					var theme = stored === 'dark' || stored === 'light'
+					var theme = override === 'dark' || override === 'light'
+						? override
+						: stored === 'dark' || stored === 'light'
 						? stored
 						: (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
 					document.documentElement.setAttribute('data-theme', theme);

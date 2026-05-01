@@ -13,13 +13,19 @@ function readStored(): Theme | null {
 	}
 }
 
+function readUrlOverride(): Theme | null {
+	if (typeof window === 'undefined') return null;
+	const value = new URLSearchParams(window.location.search).get('theme');
+	return value === 'dark' || value === 'light' ? value : null;
+}
+
 function readSystem(): Theme {
 	if (typeof window === 'undefined' || !window.matchMedia) return 'dark';
 	return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }
 
 function resolveTheme(): Theme {
-	return readStored() ?? readSystem();
+	return readUrlOverride() ?? readStored() ?? readSystem();
 }
 
 function applyTheme(next: Theme): void {
@@ -36,7 +42,7 @@ export function initTheme(): void {
 	applyTheme(initial);
 
 	window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', (e) => {
-		if (readStored()) return;
+		if (readUrlOverride() || readStored()) return;
 		const next: Theme = e.matches ? 'light' : 'dark';
 		theme.set(next);
 		applyTheme(next);
